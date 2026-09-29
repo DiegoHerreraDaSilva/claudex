@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>jev-orchestrator</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <aside id="sidebar">
+        <div class="brand">
+          <span class="dot live"></span>
+          <span>jev-orchestrator</span>
+        </div>
+        <div class="sidebar-meta">
+          <span id="fleet-count">0 tasks</span>
+          <span id="fleet-mode">idle</span>
+        </div>
+        <div id="task-list" class="task-list"></div>
+      </aside>
+
+      <main id="center">
+        <header id="term-header">
+          <span id="agent-pill" class="pill">no agent</span>
+          <span class="metric">turn <b id="m-turn">0</b></span>
+          <span class="metric">in <b id="m-in">0</b></span>
+          <span class="metric">out <b id="m-out">0</b></span>
+          <span class="metric">cache <b id="m-cache">0%</b></span>
+          <span class="metric">status <b id="m-status">idle</b></span>
+        </header>
+
+        <div id="terminal" class="terminal"></div>
+
+        <footer id="telemetry">
+          <span id="t-model">model -</span>
+          <span id="t-turn">turn 0</span>
+          <span id="t-tokens">tokens 0/0</span>
+          <span id="t-latency">latency -</span>
+          <span id="t-status">idle</span>
+        </footer>
+
+        <form id="input-bar">
+          <span class="prompt">&gt;</span>
+          <input id="command-input" autocomplete="off" placeholder="type pause | resume | kill <taskId>" />
+        </form>
+      </main>
+
+      <aside id="right">
+        <div class="tabs">
+          <button class="tab active" data-tab="sessions">sessions</button>
+          <button class="tab" data-tab="diff">diff</button>
+          <button class="tab" data-tab="status">status</button>
+        </div>
+        <section id="tab-sessions" class="tab-panel active"></section>
+        <section id="tab-diff" class="tab-panel"><pre id="diff-view" class="diff"></pre></section>
+        <section id="tab-status" class="tab-panel"></section>
+      </aside>
+    </div>
+    <script src="/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+.worktrees/
+*.log
+
+# Estado persistente de tarefas (mantemos apenas os diretorios)
+tasks/pending/*.json
+tasks/current/*.json
+tasks/complete/*.json
