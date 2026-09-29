@@ -384,7 +384,7 @@ export function heuristicComplexity(description: string): ComplexityDecision {
     complexity = "judgment";
   } else if (HEURISTIC_STRONG.some((k) => text.includes(k))) {
     complexity = "strong";
-  } else if (HEURISTIC_FAST.some((k) => text.includes(k)) || words <= 8) {
+  } else if (HEURISTIC_FAST.some((k) => text.includes(k)) || words <= 3) {
     complexity = "fast";
   }
   const probabilities: Record<string, number> = {

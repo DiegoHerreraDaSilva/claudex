@@ -228,6 +228,7 @@ export class Orchestrator extends TypedEmitter<OrchestratorEventMap> {
           agent: spec.label,
           model: task.snapshot.model,
         });
+        task.snapshot.status = "pending";
       }),
     );
     this.pushFleet();
