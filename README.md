@@ -1,62 +1,174 @@
 # Claudex
 
-Fleet orchestrator that routes development subtasks across **Claude Code**, **Codex** and the
-**Jev (TypeSafe)** decision API, runs each agent in an isolated git worktree, reviews the result
-and merges it back — all streamed live to a terminal-style web dashboard.
+**A local-first desktop orchestrator that routes your coding tasks across Claude Code, Codex, and the Jev (TypeSafe) decision API — with a chat interface.**
+
+You describe a task in plain language. Claudex asks Jev (a fast decision model) how the work should be handled, then routes it to the right agent, runs it inside an isolated git worktree of *your* project folder, shows you the diff, and lets you apply or discard it. Everything runs on your machine with **your own accounts and API keys**.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
+
+---
+
+## How routing works
 
 ```
-description ──▶ Jev classifies complexity ──▶ route to agent ──▶ isolated worktree
-                                                                    │
-                            review (Opus + Jev noul) ◀── diff ◀──────┘
-                                                                    │
-                                            merge into base branch ◀─┘
+                 ┌──────────────┐
+                 │    INPUT     │  your message in the chat
+                 └──────┬───────┘
+                        ▼
+                 ┌──────────────┐
+                 │     JEV      │  TypeSafe decision model (or local heuristic fallback)
+                 └──────┬───────┘
+              simples implementação │ precisa planejar algo
+                    ┌───────────────┴───────────────┐
+                    ▼                               ▼
+             ┌────────────┐                  ┌────────────┐
+             │   SONNET   │                  │    OPUS    │  (plans first)
+             └────────────┘                  └─────┬──────┘
+                                          feature complexa │ feature mais simples
+                                        ┌──────────────────┴──────────────────┐
+                                        ▼                                     ▼
+                                 ┌────────────┐                        ┌────────────┐
+                                 │   SOL 6    │                        │   SONNET   │
+                                 │ (Codex)    │                        └────────────┘
+                                 └────────────┘
 ```
 
-## Routing
+- **Simple implementation** → Claude **Sonnet** implements directly.
+- **Needs planning** → Claude **Opus** writes a plan and decides if it is a **complex feature** (→ Codex **Sol 6**) or a **simpler feature** (→ **Sonnet**).
 
-| Jev complexity | Agent | Model (default) |
-| --- | --- | --- |
-| `fast` / `balanced` | Claude Code (Agent SDK) | `sonnet` |
-| `strong` | Codex SDK | `gpt-6-sol` |
-| `judgment` | Claude Code (Agent SDK) | `opus` |
+If the TypeSafe API is unavailable (no key, `429`/`529`/`5xx`), Claudex falls back to a local heuristic router so the workflow never stalls.
 
-If the Jev API is unavailable (missing key, 429/529/5xx), the orchestrator falls back to a local
-heuristic router, so the fleet never stalls (`src/jev.ts:heuristicComplexity`).
+---
+
+## Features
+
+- **Desktop chat app** (Electron) with a **native folder picker**, plus a browser mode.
+- **Projects**: register any folder that is a git repository; each project keeps its own conversation.
+- **Continuous sessions**: follow-ups resume the same Claude `session_id` or Codex `thread_id`.
+- **Isolated git worktrees**: agents never touch your working tree directly.
+- **Manual review**: an **Apply** / **Discard** bar shows the diff of what the agents changed.
+- **In-app credentials**: connect/disconnect Claude and Codex, paste API keys, see account/plan.
+- **Local-first & private**: no telemetry; credentials and keys stay on your machine.
+- **CLI + live dashboard** for scripted, non-interactive runs.
+- **Dark / light theme**.
+
+---
 
 ## Requirements
 
-- Node.js **22+** (the Claude Agent SDK bundles a native Claude Code binary)
-- git with `worktree` support
-- A Claude Pro/Max subscription and a ChatGPT Plus/Pro subscription
-- A TypeSafe API key (early access): https://console.typesafe.ai/keys
+- **Node.js 22+** and **git** on your `PATH`
+- A **Claude Pro/Max** subscription *or* an `ANTHROPIC_API_KEY`
+- A **ChatGPT Plus/Pro** subscription *or* an `OPENAI_API_KEY` (for the Codex path)
+- A **TypeSafe (Jev) API key** — optional; without it Claudex uses the local heuristic router
+  (get one at https://console.typesafe.ai/keys)
 
-## Install & build
+Claudex uses the **official SDKs** for authentication — it never extracts or reuses OAuth tokens in third-party tools:
+
+- Claude: `@anthropic-ai/claude-agent-sdk` (reads `~/.claude/.credentials.json`)
+- Codex: `@openai/codex-sdk` (reads `~/.codex/auth.json`)
+
+---
+
+## Install (from source)
 
 ```bash
+git clone https://github.com/DiegoHerreraDaSilva/claudex.git
+cd claudex
 npm install
 npm run build
 ```
 
-## Authentication
+> The folder you point Claudex at must be a git repository. If it isn't yet:
+> ```bash
+> cd /path/to/your/project
+> git init && git commit --allow-empty -m "init"
+> ```
 
-The official SDKs read subscription credentials from disk — no API keys are needed for the models:
+---
 
-- Claude: `~/.claude/.credentials.json`, created by `claude login`
-- Codex: `~/.codex/auth.json`, created by `codex login` → "Sign in with ChatGPT"
+## Run
 
-> **Important:** if `ANTHROPIC_API_KEY` is set, the Anthropic SDK uses it and **ignores the
-> subscription** (token billing). `checkPrerequisites()` warns you when that variable is present.
-> The Claude init message exposes `apiKeySource`, so agents can detect it at runtime too.
+**Desktop app (Electron window):**
 
-Copy `.env.example` to `.env` and set `TYPESAFE_API_KEY`. The orchestrator also loads `.env`
-automatically at startup.
+```bash
+npm run app
+```
+
+**Browser mode (same backend, served locally):**
+
+```bash
+npm run app:web
+# then open http://localhost:8080
+```
+
+On Windows you can create a desktop shortcut to `npm run app` (see `desktop/`).
+
+---
+
+## Connect your accounts and API keys
+
+Open the app, click **settings** (top-right), and use the connect/disconnect buttons or the key fields. Anything you save is written to `.env` on your machine (which is git-ignored).
+
+| Provider | Connect with subscription | Or use an API key |
+| --- | --- | --- |
+| **Claude** | **Connect** runs `claude auth login` (opens your browser to sign in with Claude Pro/Max) | paste `ANTHROPIC_API_KEY` |
+| **Codex** | **Connect** runs `codex login` → *Sign in with ChatGPT* | paste `OPENAI_API_KEY` |
+| **Jev / TypeSafe** | — | paste `TYPESAFE_API_KEY` (https://console.typesafe.ai/keys) |
+
+**Disconnect** runs the matching logout (`claude auth logout` / `codex logout`) and removes the stored credentials.
+
+> **Important:** if `ANTHROPIC_API_KEY` is set, the Anthropic SDK uses it and **ignores your Claude subscription** (token billing). Unset it to use Pro/Max. The app warns you when it is present. Same idea for `OPENAI_API_KEY` vs. the ChatGPT login.
+
+You can also configure everything from the CLI by copying `.env.example` to `.env`.
+
+---
+
+## Using the app
+
+1. **New project** → **choose folder** (native picker in the desktop app; a built-in folder browser in the web UI). Folders that are git repositories are tagged `git`.
+2. Type your task and **send**. You'll see the Jev decision (e.g. `precisa planejar → claude:opus`, then `feature complexa → gpt-6-sol`), the plan, and the agent's tool calls streaming live.
+3. Review the **diff** on the right. Click **Apply** to merge the project branch into your branch, or **Discard** to throw the changes away.
+
+### Resume / continuity
+
+- Claude runs return a `session_id` → resumed on your next message in the same project.
+- Codex runs return a `thread_id` → resumed the same way.
+- Handles are visible in the **session** tab and persisted in each project's state.
+
+---
+
+## Configuration (`.env`)
+
+```dotenv
+# Credentials for the model subscriptions are read by the SDKs:
+#   Claude: ~/.claude/.credentials.json  (created by `claude auth login`)
+#   Codex:  ~/.codex/auth.json           (created by `codex login`)
+# Do NOT set ANTHROPIC_API_KEY if you want to use your Claude subscription.
+
+TYPESAFE_API_KEY=sua-chave
+TYPESAFE_BASE_URL=https://api.typesafe.ai
+JEV_MODEL=jev-latest
+JEV_CACHE_TTL=3600
+WS_PORT=8080
+AGENT_TIMEOUT_MS=600000
+MAX_PARALLEL_TASKS=3
+DEFAULT_PLANNER_MODEL=opus
+DEFAULT_SIMPLE_MODEL=sonnet
+DEFAULT_COMPLEX_MODEL=gpt-6-sol
+```
+
+---
 
 ## CLI
 
+The same engine is available from the command line:
+
 ```bash
-claudex run "<description>"   # full flow: route, execute, review, merge
-claudex dashboard             # WS + HTTP dashboard on http://localhost:8080 (works while idle)
-claudex app                   # desktop chat app (projects + continuous sessions)
+claudex run "<description>"   # full flow: route, execute in worktrees, review, merge
+claudex app                   # chat app server (browser mode)
+claudex dashboard             # WS + HTTP fleet dashboard (works while idle)
 claudex status                # print the fleet snapshot
 claudex worktrees             # list active worktrees
 claudex clean                 # remove orphan worktrees and branches
@@ -66,127 +178,69 @@ Options for `run`:
 
 | Flag | Effect |
 | --- | --- |
-| `--subtasks <json>` | Split the work manually, e.g. `'["a","b"]'` or `'[{"id":"auth","description":"..."}]'` |
+| `--subtasks <json>` | Split the work manually, e.g. `'["a","b"]'` |
 | `--cleanup` | Remove worktrees after finishing |
 | `--dry-run` | Ask Jev for routing only; run no agents |
 | `--no-server` | Do not start the dashboard during the run |
 
-`claudex run` starts the dashboard in the same process, so the browser updates live.
+Smoke tests:
 
-## Example
-
-```
-$ claudex run "adicionar endpoint /health" --subtasks '["criar rota /health", "documentar /health no README"]'
-
-Prerequisites
-  ok   git repository - git repository detected at ~/projeto
-  ok   git worktree - git worktree is available
-  ok   Claude subscription - credentials found at ~/.claude/.credentials.json
-  ok   Codex subscription - credentials found at ~/.codex/auth.json
-  ok   TYPESAFE_API_KEY - configured (endpoint https://api.typesafe.ai)
-
-dashboard: http://localhost:8080  (ws + http on the same port)
-[task] created 4f2a1c0e :: criar rota /health
-[task] created 91bd77aa :: documentar /health no README
-[jev] 4f2a1c0e -> claude:sonnet (fast, conf 0.87, jev)
-[jev] 91bd77aa -> claude:sonnet (fast, conf 0.81, jev)
-[run] 4f2a1c0e worktree=/home/me/projeto/.worktrees/4f2a1c0e
-[run] 91bd77aa worktree=/home/me/projeto/.worktrees/91bd77aa
-[done] 4f2a1c0e in 34.2s, 41 diff lines
-[done] 91bd77aa in 12.8s, 9 diff lines
-
-claude:sonnet      completed   4f2a1c0e criar rota /health
-  complexity=fast turns=6 in=18422 out=1203 files=2
-claude:sonnet      completed   91bd77aa documentar /health no README
-  complexity=fast turns=4 in=9120 out=640 files=1
-
-Fleet complete. merged=2/2
-Dashboard still running. Press Ctrl+C to exit.
+```bash
+npm run smoke:jev                      # one Jev question (or heuristic fallback)
+npm run smoke:worktree                 # create → diff → list → remove
+SMOKE_AGENTS=1 npm run smoke:agents    # real Claude + Codex runs (uses your subscriptions)
 ```
 
-## Dashboard (ASCII)
-
-```
-┌──────────────────────────┬─────────────────────────────────────────────┬────────────────────────────┐
-│ ● Claudex                │ claude:sonnet   turn 6  in 18422  out 1203   │ sessions │ diff │ status   │
-│ 2 tasks        parallel  │ cache 0%  status running                     │                            │
-├──────────────────────────┼─────────────────────────────────────────────┼────────────────────────────┤
-│ ● 4f2a1c0e criar rota... │  1 init session=7c1f… model=sonnet           │ 4f2a1c0e claude:sonnet     │
-│   [claude:sonnet][running]│  2 Vou criar a rota /health em src/server.. │ session_id 7c1f…           │
-│   ▓▓▓▓▓░░░░░ ctx          │  3 ┌ Read src/server/app.ts                  │ status   running           │
-│   ▓▓░░░░░░░░ cache        │  4 │ Write src/server/health.ts              │ duration 34.2s             │
-│   src/server/health.ts    │  5 └ Edit src/server/app.ts                 │ 91bd77aa claude:sonnet     │
-│ ● 91bd77aa documentar...  │  6 Rota adicionada e registrada no router.  │ session_id 2ab9…           │
-│   [claude:sonnet][deciding]│  7 ✓ Review approved (noul=0.913)          │                            │
-├──────────────────────────┼─────────────────────────────────────────────┼────────────────────────────┤
-│ model sonnet │ turn 6   │ tokens 18422/1203 │ latency 34.2s │ running  │                            │
-│ > pause | resume | kill <taskId>                                       │                            │
-└──────────────────────────┴─────────────────────────────────────────────┴────────────────────────────┘
-```
-
-- Left sidebar: one card per task (pulsing LED = running, amber = waiting, red = error, blue = done),
-  model badge, context/cache bars and files touched.
-- Center: agent pill, turn/token/cache metrics, a numbered terminal with tool calls as side blocks,
-  a telemetry bar and a command input (`pause`, `resume`, `kill <taskId>`).
-- Right panel: **sessions** (`session_id` / `thread_id`), **diff** viewer, **status** summary.
-
-## Resuming sessions
-
-Every agent run returns a resumable handle, stored on the task snapshot:
-
-- Claude → `session_id` (from the SDK init message). Resume with `options.resume`.
-- Codex → `thread_id` (from the `thread.started` event). Resume with `codex.resumeThread(id)`.
-
-The reviewer triggers one automatic correction round: if a diff is rejected, the orchestrator
-resumes the same Claude session or Codex thread with the list of issues, then re-diffs and
-re-reviews. The handles are visible in the dashboard's **sessions** tab and in the persisted
-`tasks/*/*.json` snapshots.
+---
 
 ## Project layout
 
 ```
+desktop/                Electron shell (main + preload)
 src/
-  index.ts            CLI entry point
-  orchestrator.ts     Orchestrator (3-phase flow, typed event emitter)
-  jev.ts              TypeSafe Jev client (retry, cache, heuristic fallback)
-  worktree.ts         Git worktree manager (spawn git only)
-  prerequisites.ts    checkPrerequisites()
-  config.ts           env + .env loader
-  events.ts           shared types + TypedEmitter
+  index.ts              CLI entry point
+  app/
+    projects.ts         project registry (per-project folders)
+    chat.ts             chat service: Jev routing tree, sessions, worktrees, apply/discard
+    git.ts              git helpers (worktrees, commit, diff, merge, reset)
   agents/
-    types.ts          AgentSpec, AgentRunResult, routing
-    claude.ts         Claude Agent SDK wrapper
-    codex.ts          Codex SDK wrapper
+    claude.ts           Claude Agent SDK wrapper
+    codex.ts            Codex SDK wrapper
+    types.ts            shared agent types
+  jev.ts                TypeSafe Jev client (retry, cache, heuristic fallback)
+  orchestrator.ts       non-interactive fleet orchestrator (CLI)
+  worktree.ts           worktree manager for the CLI
   server/
-    ws.ts             WebSocket server (snapshot, broadcast, commands)
-    static.ts         HTTP server (/health, /api/state, dashboard)
-  dashboard/          index.html, style.css, app.js (no framework)
-  smoke/              smoke tests
-tasks/               persisted snapshots (pending/current/complete)
-.worktrees/          temporary worktrees (gitignored)
+    appServer.ts        HTTP + WebSocket server for the chat app
+    ws.ts / static.ts   realtime + static server for the dashboard
+  chat/                 chat UI (HTML/CSS/JS, no framework)
+  dashboard/            fleet dashboard UI
+  accounts.ts           login/logout for Claude and Codex (auth management)
 ```
 
-## Smoke tests
+---
 
-```bash
-npm run smoke:jev        # one Noul question (or heuristic fallback without a key)
-npm run smoke:worktree   # create → diff → list → remove
-SMOKE_AGENTS=1 npm run smoke:agents   # real Claude + Codex runs (uses your subscriptions)
-```
+## Security & privacy
+
+- Everything runs **locally**. No data is sent anywhere except to the model providers and TypeSafe, using *your* credentials.
+- `.env`, `~/.claude/`, and `~/.codex/` are **never** committed; `.env` is git-ignored.
+- Agents run in **isolated git worktrees**, and changes only reach your branch when you click **Apply**.
+
+---
 
 ## Notes on API contracts (verified)
 
-- **Claude**: the TypeScript SDK is `@anthropic-ai/claude-agent-sdk`. The older
-  `@anthropic-ai/claude-code` package is now only the CLI installer and does **not** export
-  `query()`. `query({ prompt, options })` matches the documented API (`model`, `allowedTools`,
-  `maxTurns`, `cwd`, `resume`, `outputFormat`).
-- **Codex**: `@openai/codex-sdk` exports `Codex`, `Thread`, `ThreadEvent`. Streamed event types are
-  `thread.started`, `turn.started`, `turn.completed`, `turn.failed`, `item.started`,
-  `item.updated`, `item.completed`, `error` (there is **no** `item.created`). The worktree path is
-  passed via `startThread({ workingDirectory })`.
-- **Jev**: `POST {TYPESAFE_BASE_URL}/v1/systemone` with `{ state, model, questions }` returns
-  `{ model, answers, usage }`. A Noul answer is `{ type: "noul", noul }` — it has **no**
-  `confidence` (unlike Choice/Score). Score answers also carry a `legend`. Retries cover `429` and
-  `529`. Input costs $0.042/MTok; output is free.
-- **Structured output**: `zod-to-json-schema` is incompatible with the Agent SDK peer dependency on
-  `zod@^4`, so this project uses the built-in `z.toJSONSchema()` instead.
+- **Claude**: the TypeScript SDK is `@anthropic-ai/claude-agent-sdk`. The older `@anthropic-ai/claude-code` package is only the CLI installer and no longer exports `query()`.
+- **Codex**: `@openai/codex-sdk` streamed events are `thread.started`, `turn.started`, `turn.completed`, `turn.failed`, `item.started`, `item.updated`, `item.completed`, `error`. The worktree path is passed via `startThread({ workingDirectory })`.
+- **Jev**: `POST {TYPESAFE_BASE_URL}/v1/systemone` with `{ state, model, questions }` returns `{ model, answers, usage }`. A Noul answer is `{ type: "noul", noul }` (no `confidence`, unlike Choice/Score). Retries cover `429` and `529`. Input costs $0.042/MTok; output is free.
+- Structured output uses `zod` 4's built-in `z.toJSONSchema()` (the Agent SDK requires `zod@^4`).
+
+---
+
+## Contributing
+
+Issues and pull requests are welcome. Please run `npm run typecheck && npm run build` before opening a PR.
+
+## License
+
+[MIT](LICENSE) © Diego Herrera

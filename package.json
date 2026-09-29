@@ -3,7 +3,22 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Claudex - fleet orchestrator routing tasks across Claude Code, Codex and the Jev (TypeSafe) decision API",
+  "description": "Claudex - local-first orchestrator routing tasks across Claude Code, Codex and the Jev (TypeSafe) decision API",
+  "license": "MIT",
+  "author": "Diego Herrera",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DiegoHerreraDaSilva/claudex.git"
+  },
+  "keywords": [
+    "claude",
+    "codex",
+    "agent",
+    "orchestrator",
+    "typesafe",
+    "jev",
+    "electron"
+  ],
   "engines": {
     "node": ">=22"
   },
