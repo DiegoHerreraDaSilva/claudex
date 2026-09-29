@@ -19,18 +19,18 @@ Run `jev` from inside the git repository you want the agents to work on. Set
 
 | Command | Purpose |
 | --- | --- |
-| `jev run "<description>"` | Full flow: route, execute in worktrees, review, merge |
-| `jev dashboard` | Start the WS + HTTP dashboard on http://localhost:8080 |
-| `jev status` | Print the fleet snapshot |
-| `jev worktrees` | List active worktrees |
-| `jev clean` | Remove orphan worktrees and branches |
+| `claudex run "<description>"` | Full flow: route, execute in worktrees, review, merge |
+| `claudex dashboard` | Start the WS + HTTP dashboard on http://localhost:8080 |
+| `claudex status` | Print the fleet snapshot |
+| `claudex worktrees` | List active worktrees |
+| `claudex clean` | Remove orphan worktrees and branches |
 
-## `jev run`
+## `claudex run`
 
 ### Single task
 
 ```bash
-jev run "adicionar endpoint /health"
+claudex run "adicionar endpoint /health"
 ```
 
 Jev classifies the complexity and routes the task to Claude Code or Codex (see the routing
@@ -39,7 +39,7 @@ table in the README).
 ### Preview routing without running agents
 
 ```bash
-jev run "refatorar o módulo de autenticação" --dry-run
+claudex run "refatorar o módulo de autenticação" --dry-run
 ```
 
 Only asks Jev where the task would go; no agents start and nothing is changed.
@@ -47,61 +47,61 @@ Only asks Jev where the task would go; no agents start and nothing is changed.
 ### Manual subtasks (strings)
 
 ```bash
-jev run "adicionar endpoint /health" \
+claudex run "adicionar endpoint /health" \
   --subtasks '["criar rota /health", "documentar /health no README"]'
 ```
 
 ### Manual subtasks (objects with ids)
 
 ```bash
-jev run "migrar autenticação" \
+claudex run "migrar autenticação" \
   --subtasks '[{"id":"auth","description":"trocar sessão por JWT"},{"id":"tests","description":"atualizar testes de login"}]'
 ```
 
 > On PowerShell, wrap the JSON in single quotes and escape inner double quotes, or use a
-> here-string / variable: `$s = '["a","b"]'; jev run "x" --subtasks $s`.
+> here-string / variable: `$s = '["a","b"]'; claudex run "x" --subtasks $s`.
 
 ### Clean up worktrees afterwards
 
 ```bash
-jev run "corrigir typo no README" --cleanup
+claudex run "corrigir typo no README" --cleanup
 ```
 
 ### Run without the dashboard
 
 ```bash
-jev run "atualizar dependências" --no-server
+claudex run "atualizar dependências" --no-server
 ```
 
 ### Combining flags
 
 ```bash
-jev run "adicionar cache" --subtasks '["implementar cache LRU","testes do cache"]' --cleanup --no-server
+claudex run "adicionar cache" --subtasks '["implementar cache LRU","testes do cache"]' --cleanup --no-server
 ```
 
-## `jev dashboard`
+## `claudex dashboard`
 
 ```bash
-jev dashboard
+claudex dashboard
 ```
 
 Open http://localhost:8080. It works while idle. In the command input you can type
-`pause`, `resume` or `kill <taskId>`. `jev run` starts the dashboard automatically unless
+`pause`, `resume` or `kill <taskId>`. `claudex run` starts the dashboard automatically unless
 `--no-server` is given.
 
-## `jev status`
+## `claudex status`
 
 ```bash
-jev status
+claudex status
 ```
 
 Prints the current fleet snapshot (tasks, agents, status).
 
-## `jev worktrees` and `jev clean`
+## `claudex worktrees` and `claudex clean`
 
 ```bash
-jev worktrees   # list worktrees under .worktrees/
-jev clean       # remove orphan worktrees and their branches
+claudex worktrees   # list worktrees under .worktrees/
+claudex clean       # remove orphan worktrees and their branches
 ```
 
 Use `clean` after an interrupted run.
@@ -109,10 +109,10 @@ Use `clean` after an interrupted run.
 ## Typical workflow
 
 ```bash
-jev run "feature X" --dry-run     # 1. check the routing
-jev run "feature X"               # 2. execute, review and merge
-jev worktrees                     # 3. inspect leftovers
-jev clean                         # 4. tidy up
+claudex run "feature X" --dry-run     # 1. check the routing
+claudex run "feature X"               # 2. execute, review and merge
+claudex worktrees                     # 3. inspect leftovers
+claudex clean                         # 4. tidy up
 ```
 
 ## Troubleshooting

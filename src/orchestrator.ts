@@ -138,13 +138,16 @@ export class Orchestrator extends TypedEmitter<OrchestratorEventMap> {
     for (const task of created) {
       const snap = task.snapshot;
       if (snap.status !== "completed") continue;
+      await this.worktrees.commit(snap.taskId, `${snap.description}`);
       const result = await this.worktrees.merge(snap.taskId, baseBranch);
       if (result.success) {
         this.setStatus(task, "merged");
         merged.push(snap.taskId);
       } else {
         this.setStatus(task, "failed");
-        task.snapshot.error = `Merge conflict: ${(result.conflicts ?? []).join("; ")}`;
+        task.snapshot.error = result.conflicts?.length
+          ? `Merge conflict: ${result.conflicts.join("; ")}`
+          : `Merge failed: ${result.reason ?? "unknown"}`;
       }
       this.pushFleet();
     }

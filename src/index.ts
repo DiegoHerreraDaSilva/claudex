@@ -1,12 +1,17 @@
 #!/usr/bin/env node
+import path from "node:path";
 import process from "node:process";
 import chalk from "chalk";
-import { getConfig } from "./config.js";
+import { getConfig, setEnvValues } from "./config.js";
+import { runAccountAction } from "./accounts.js";
+import { ProjectRegistry } from "./app/projects.js";
+import { ChatService } from "./app/chat.js";
+import { createAppServer } from "./server/appServer.js";
 import { JevClient } from "./jev.js";
 import { Orchestrator, type Subtask } from "./orchestrator.js";
-import { attachRealtime } from "./server/ws.js";
+import { attachRealtime, type RealtimeHooks } from "./server/ws.js";
 import { createStaticServer } from "./server/static.js";
-import { checkPrerequisites, type PrerequisiteReport } from "./prerequisites.js";
+import { checkPrerequisites, getCredentialStatus, type PrerequisiteReport } from "./prerequisites.js";
 import { WorktreeManager } from "./worktree.js";
 import type { TaskSnapshot } from "./events.js";
 
@@ -132,9 +137,21 @@ function wireConsole(orchestrator: Orchestrator): void {
   });
 }
 
+function buildHooks(): RealtimeHooks {
+  return {
+    getCredentialStatus: () => getCredentialStatus(getConfig()),
+    applySettings: (values) => {
+      setEnvValues(getConfig().projectRoot, values);
+      return getCredentialStatus(getConfig());
+    },
+    runAccountAction: (provider, action, onLine) =>
+      runAccountAction(provider, action, getConfig().projectRoot, onLine),
+  };
+}
+
 async function startServer(orchestrator: Orchestrator, port: number): Promise<void> {
   const server = createStaticServer(orchestrator, { startedAt: Date.now() });
-  attachRealtime(server, orchestrator);
+  attachRealtime(server, orchestrator, buildHooks());
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
     server.listen(port, () => resolve());
@@ -145,7 +162,7 @@ async function startServer(orchestrator: Orchestrator, port: number): Promise<vo
 async function commandRun(args: CliArgs): Promise<number> {
   const description = args.positional.join(" ").trim();
   if (!description && (!args.subtasks || args.subtasks.length === 0)) {
-    console.error(bad("Usage: jev run \"<description>\" [--subtasks <json>] [--cleanup] [--dry-run]"));
+    console.error(bad("Usage: claudex run \"<description>\" [--subtasks <json>] [--cleanup] [--dry-run]"));
     return 2;
   }
   const config = getConfig();
@@ -209,6 +226,28 @@ async function commandDashboard(): Promise<number> {
   return 0;
 }
 
+async function commandApp(): Promise<number> {
+  const config = getConfig();
+  const dataDir = path.join(config.projectRoot, ".claudex");
+  const worktreesBase = path.join(dataDir, "worktrees");
+  const registry = new ProjectRegistry(dataDir);
+  await registry.load();
+  const chat = new ChatService(registry, new JevClient(config), config, worktreesBase);
+  const srv = createAppServer({ chat, registry, config });
+  try {
+    const port = await srv.listen(config.wsPort);
+    console.log(ok(`claudex: http://localhost:${port}`) + dim("  (abra no navegador)"));
+  } catch (err) {
+    console.error(bad(`Could not start app server: ${err instanceof Error ? err.message : err}`));
+    return 1;
+  }
+  await new Promise<void>((resolve) => {
+    process.on("SIGINT", () => resolve());
+    process.on("SIGTERM", () => resolve());
+  });
+  return 0;
+}
+
 async function commandWorktrees(): Promise<number> {
   const config = getConfig();
   const manager = new WorktreeManager(config.projectRoot);
@@ -247,13 +286,14 @@ async function commandClean(): Promise<number> {
 function commandHelp(): number {
   console.log(
     [
-      chalk.bold("jev-orchestrator"),
+      chalk.bold("Claudex"),
       "",
-      "  jev run \"<description>\"   full flow: route, execute in worktrees, review, merge",
-      "  jev dashboard            start WS + HTTP dashboard server (works while idle)",
-      "  jev status               print the current fleet snapshot",
-      "  jev worktrees            list active worktrees",
-      "  jev clean                remove orphan worktrees and branches",
+      "  claudex run \"<description>\"   full flow: route, execute in worktrees, review, merge",
+      "  claudex dashboard            start WS + HTTP dashboard server (works while idle)",
+      "  claudex app                  start the chat app (projects + continuous sessions)",
+      "  claudex status               print the current fleet snapshot",
+      "  claudex worktrees            list active worktrees",
+      "  claudex clean                remove orphan worktrees and branches",
       "",
       "Options for `run`:",
       "  --subtasks <json>        manual subtasks, e.g. '[\"a\",\"b\"]'",
@@ -280,6 +320,9 @@ async function main(): Promise<void> {
       break;
     case "dashboard":
       code = await commandDashboard();
+      break;
+    case "app":
+      code = await commandApp();
       break;
     case "status": {
       const config = getConfig();

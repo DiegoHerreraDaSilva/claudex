@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Claudex</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <aside id="sidebar">
+        <div class="brand">
+          <span class="dot live"></span>
+          <span>Claudex</span>
+        </div>
+        <button id="new-project-btn" class="new-btn">+ novo projeto</button>
+        <div id="project-list" class="project-list"></div>
+        <div class="sidebar-foot">
+          <span id="cred-summary" class="muted"></span>
+        </div>
+      </aside>
+
+      <main id="center">
+        <header id="chat-header">
+          <div class="proj-info">
+            <div id="proj-name" class="proj-name">nenhum projeto</div>
+            <div id="proj-meta" class="proj-meta"></div>
+          </div>
+          <div class="header-actions">
+            <button id="apply-btn" class="ghost-btn" disabled>aplicar</button>
+            <button id="discard-btn" class="ghost-btn" disabled>descartar</button>
+            <button id="theme-toggle" class="ghost-btn">light</button>
+          </div>
+        </header>
+
+        <div id="transcript" class="transcript"></div>
+
+        <form id="composer">
+          <textarea id="composer-input" rows="1" placeholder="descreva a tarefa para os agentes..."></textarea>
+          <button id="send-btn" type="submit">enviar</button>
+        </form>
+      </main>
+
+      <aside id="right">
+        <div class="tabs">
+          <button class="tab active" data-tab="diff">diff</button>
+          <button class="tab" data-tab="session">sessão</button>
+        </div>
+        <section id="tab-diff" class="tab-panel active">
+          <div id="diff-files" class="diff-files"></div>
+          <pre id="diff-view" class="diff"></pre>
+        </section>
+        <section id="tab-session" class="tab-panel"></section>
+      </aside>
+    </div>
+
+    <div id="modal" class="modal hidden">
+      <div class="modal-card">
+        <div class="modal-head">
+          <span>novo projeto</span>
+          <button id="modal-close" class="ghost-btn">fechar</button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <div class="field-label">nome</div>
+            <input id="np-name" type="text" placeholder="meu-projeto" autocomplete="off" />
+          </div>
+          <div class="field">
+            <div class="field-label">pasta do projeto (repositório git)</div>
+            <div class="folder-row">
+              <input id="np-path" type="text" placeholder="C:\\caminho\\do\\repo" autocomplete="off" />
+              <button id="np-browse" class="small-btn">escolher pasta</button>
+            </div>
+            <div id="np-status" class="np-status"></div>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <span></span>
+          <button id="np-create" class="primary-btn">criar projeto</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="browser-modal" class="modal hidden">
+      <div class="modal-card">
+        <div class="modal-head">
+          <span>escolher pasta</span>
+          <button id="browser-close" class="ghost-btn">fechar</button>
+        </div>
+        <div class="modal-body">
+          <div id="browser-path" class="browser-path">—</div>
+          <div id="browser-list" class="browser-list"></div>
+        </div>
+        <div class="modal-foot">
+          <button id="browser-up" class="small-btn">subir</button>
+          <button id="browser-select" class="primary-btn">selecionar esta pasta</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

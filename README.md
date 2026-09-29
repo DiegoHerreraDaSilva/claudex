@@ -1,4 +1,4 @@
-# jev-orchestrator
+# Claudex
 
 Fleet orchestrator that routes development subtasks across **Claude Code**, **Codex** and the
 **Jev (TypeSafe)** decision API, runs each agent in an isolated git worktree, reviews the result
@@ -54,11 +54,12 @@ automatically at startup.
 ## CLI
 
 ```bash
-jev run "<description>"   # full flow: route, execute, review, merge
-jev dashboard             # WS + HTTP dashboard on http://localhost:8080 (works while idle)
-jev status                # print the fleet snapshot
-jev worktrees             # list active worktrees
-jev clean                 # remove orphan worktrees and branches
+claudex run "<description>"   # full flow: route, execute, review, merge
+claudex dashboard             # WS + HTTP dashboard on http://localhost:8080 (works while idle)
+claudex app                   # desktop chat app (projects + continuous sessions)
+claudex status                # print the fleet snapshot
+claudex worktrees             # list active worktrees
+claudex clean                 # remove orphan worktrees and branches
 ```
 
 Options for `run`:
@@ -70,12 +71,12 @@ Options for `run`:
 | `--dry-run` | Ask Jev for routing only; run no agents |
 | `--no-server` | Do not start the dashboard during the run |
 
-`jev run` starts the dashboard in the same process, so the browser updates live.
+`claudex run` starts the dashboard in the same process, so the browser updates live.
 
 ## Example
 
 ```
-$ jev run "adicionar endpoint /health" --subtasks '["criar rota /health", "documentar /health no README"]'
+$ claudex run "adicionar endpoint /health" --subtasks '["criar rota /health", "documentar /health no README"]'
 
 Prerequisites
   ok   git repository - git repository detected at ~/projeto
@@ -107,7 +108,7 @@ Dashboard still running. Press Ctrl+C to exit.
 
 ```
 ┌──────────────────────────┬─────────────────────────────────────────────┬────────────────────────────┐
-│ ● jev-orchestrator       │ claude:sonnet   turn 6  in 18422  out 1203   │ sessions │ diff │ status   │
+│ ● Claudex                │ claude:sonnet   turn 6  in 18422  out 1203   │ sessions │ diff │ status   │
 │ 2 tasks        parallel  │ cache 0%  status running                     │                            │
 ├──────────────────────────┼─────────────────────────────────────────────┼────────────────────────────┤
 │ ● 4f2a1c0e criar rota... │  1 init session=7c1f… model=sonnet           │ 4f2a1c0e claude:sonnet     │

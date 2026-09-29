@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>jev-orchestrator</title>
+    <title>Claudex</title>
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
@@ -11,7 +11,7 @@
       <aside id="sidebar">
         <div class="brand">
           <span class="dot live"></span>
-          <span>jev-orchestrator</span>
+          <span>Claudex</span>
         </div>
         <div class="sidebar-meta">
           <span id="fleet-count">0 tasks</span>
@@ -23,11 +23,17 @@
       <main id="center">
         <header id="term-header">
           <span id="agent-pill" class="pill">no agent</span>
-          <span class="metric">turn <b id="m-turn">0</b></span>
-          <span class="metric">in <b id="m-in">0</b></span>
-          <span class="metric">out <b id="m-out">0</b></span>
-          <span class="metric">cache <b id="m-cache">0%</b></span>
-          <span class="metric">status <b id="m-status">idle</b></span>
+          <div class="metrics">
+            <span class="metric">turn <b id="m-turn">0</b></span>
+            <span class="metric">in <b id="m-in">0</b></span>
+            <span class="metric">out <b id="m-out">0</b></span>
+            <span class="metric">cache <b id="m-cache">0%</b></span>
+            <span class="metric">status <b id="m-status">idle</b></span>
+          </div>
+          <div class="header-actions">
+            <button id="theme-toggle" class="ghost-btn" title="alternar tema">light</button>
+            <button id="settings-btn" class="ghost-btn">settings<span id="settings-dot" class="cred-dot"></span></button>
+          </div>
         </header>
 
         <div id="terminal" class="terminal"></div>
@@ -56,6 +62,65 @@
         <section id="tab-diff" class="tab-panel"><pre id="diff-view" class="diff"></pre></section>
         <section id="tab-status" class="tab-panel"></section>
       </aside>
+    </div>
+
+    <div id="settings-modal" class="modal hidden">
+      <div class="modal-card">
+        <div class="modal-head">
+          <span>credentials &amp; accounts</span>
+          <button id="settings-close" class="ghost-btn">close</button>
+        </div>
+        <div class="modal-body">
+          <div id="cred-status" class="cred-status"></div>
+
+          <div class="field">
+            <div class="field-label">TypeSafe API key <em id="ts-hint"></em></div>
+            <input id="input-typesafe" type="password" placeholder="cole a chave de console.typesafe.ai/keys" autocomplete="off" />
+          </div>
+
+          <div class="field">
+            <div class="field-label">Claude account</div>
+            <div class="mode-row">
+              <span id="claude-mode" class="mode-chip"></span>
+              <span id="claude-account" class="mode-detail"></span>
+            </div>
+            <div class="btn-row">
+              <button class="small-btn" data-provider="claude" data-action="login">conectar (assinatura)</button>
+              <button class="small-btn danger" data-provider="claude" data-action="logout">desconectar</button>
+            </div>
+            <input id="input-anthropic" type="password" placeholder="ANTHROPIC_API_KEY (opcional; tem precedencia sobre a assinatura)" autocomplete="off" />
+            <label class="clear"><input type="checkbox" id="clear-anthropic" /> remover chave e voltar para a assinatura</label>
+          </div>
+
+          <div class="field">
+            <div class="field-label">Codex account</div>
+            <div class="mode-row">
+              <span id="codex-mode" class="mode-chip"></span>
+              <span id="codex-account" class="mode-detail"></span>
+            </div>
+            <div class="btn-row">
+              <button class="small-btn" data-provider="codex" data-action="login">conectar (ChatGPT)</button>
+              <button class="small-btn danger" data-provider="codex" data-action="logout">desconectar</button>
+            </div>
+            <input id="input-openai" type="password" placeholder="OPENAI_API_KEY (opcional; tem precedencia sobre o login ChatGPT)" autocomplete="off" />
+            <label class="clear"><input type="checkbox" id="clear-openai" /> remover chave e voltar para o login ChatGPT</label>
+          </div>
+
+          <div class="field">
+            <div class="field-label">Codex strong model</div>
+            <input id="input-complex-model" type="text" placeholder="gpt-6-sol" autocomplete="off" />
+          </div>
+
+          <div class="field">
+            <div class="field-label">auth log</div>
+            <pre id="account-log" class="account-log"></pre>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <span id="settings-msg" class="settings-msg"></span>
+          <button id="settings-save" class="primary-btn">save</button>
+        </div>
+      </div>
     </div>
     <script src="/app.js"></script>
   </body>

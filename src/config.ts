@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 export interface OrchestratorConfig {
@@ -43,15 +43,33 @@ function intEnv(name: string, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+const PLACEHOLDER_KEYS = new Set([
+  "sua-chave",
+  "your-key",
+  "your-api-key",
+  "changeme",
+  "api-key",
+  "sk-...",
+  "<api-key>",
+  "xxx",
+]);
+
+function cleanApiKey(raw: string | undefined): string {
+  const value = (raw ?? "").trim();
+  if (!value) return "";
+  if (PLACEHOLDER_KEYS.has(value.toLowerCase())) return "";
+  return value;
+}
+
 let cached: OrchestratorConfig | undefined;
 
 export function getConfig(): OrchestratorConfig {
   if (cached) return cached;
-  const projectRoot = process.env["JEV_PROJECT_ROOT"] ?? process.cwd();
+  const projectRoot = process.env["CLAUDEX_ROOT"] ?? process.env["JEV_PROJECT_ROOT"] ?? process.cwd();
   loadDotEnv(projectRoot);
   const cacheTtlSeconds = intEnv("JEV_CACHE_TTL", 3600);
   cached = {
-    typesafeApiKey: process.env["TYPESAFE_API_KEY"] ?? "",
+    typesafeApiKey: cleanApiKey(process.env["TYPESAFE_API_KEY"]),
     typesafeBaseUrl: process.env["TYPESAFE_BASE_URL"] ?? "https://api.typesafe.ai",
     jevModel: process.env["JEV_MODEL"] ?? "jev-latest",
     jevCacheTtlMs: cacheTtlSeconds * 1000,
@@ -64,4 +82,82 @@ export function getConfig(): OrchestratorConfig {
     projectRoot,
   };
   return cached;
+}
+
+export function updateConfig(patch: Partial<OrchestratorConfig>): OrchestratorConfig {
+  const config = getConfig();
+  Object.assign(config, patch);
+  return config;
+}
+
+export function reloadConfig(): OrchestratorConfig {
+  const cfg = getConfig();
+  Object.assign(cfg, {
+    typesafeApiKey: cleanApiKey(process.env["TYPESAFE_API_KEY"]),
+    typesafeBaseUrl: process.env["TYPESAFE_BASE_URL"] ?? cfg.typesafeBaseUrl,
+    jevModel: process.env["JEV_MODEL"] ?? cfg.jevModel,
+    wsPort: intEnv("WS_PORT", cfg.wsPort),
+    agentTimeoutMs: intEnv("AGENT_TIMEOUT_MS", cfg.agentTimeoutMs),
+    maxParallelTasks: intEnv("MAX_PARALLEL_TASKS", cfg.maxParallelTasks),
+    defaultPlannerModel: process.env["DEFAULT_PLANNER_MODEL"] ?? cfg.defaultPlannerModel,
+    defaultSimpleModel: process.env["DEFAULT_SIMPLE_MODEL"] ?? cfg.defaultSimpleModel,
+    defaultComplexModel: process.env["DEFAULT_COMPLEX_MODEL"] ?? cfg.defaultComplexModel,
+  });
+  return cfg;
+}
+
+export function maskSecret(value: string | undefined): string | null {
+  const trimmed = (value ?? "").trim();
+  if (!trimmed) return null;
+  if (trimmed.length <= 8) return "****";
+  return `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}`;
+}
+
+/** Keys the settings UI is allowed to write. */
+export const EDITABLE_ENV_KEYS = [
+  "TYPESAFE_API_KEY",
+  "ANTHROPIC_API_KEY",
+  "OPENAI_API_KEY",
+  "TYPESAFE_BASE_URL",
+  "DEFAULT_COMPLEX_MODEL",
+] as const;
+
+/**
+ * Persists the given keys to .env and applies them to process.env immediately.
+ * An empty string clears the key. Only whitelisted keys are accepted.
+ */
+export function setEnvValues(root: string, updates: Record<string, string>): void {
+  const allowed = new Set<string>(EDITABLE_ENV_KEYS);
+  const sanitized: Record<string, string> = {};
+  for (const [key, value] of Object.entries(updates)) {
+    if (allowed.has(key)) sanitized[key] = typeof value === "string" ? value.trim() : String(value ?? "");
+  }
+
+  const file = resolve(root, ".env");
+  const existing = existsSync(file) ? readFileSync(file, "utf8").split(/\r?\n/) : [];
+  const keys = Object.keys(sanitized);
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  for (const line of existing) {
+    const match = /^([A-Z0-9_]+)\s*=/.exec(line.trim());
+    const key = match?.[1];
+    if (key && keys.includes(key)) {
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(`${key}=${sanitized[key]}`);
+    } else {
+      out.push(line);
+    }
+  }
+  for (const key of keys) {
+    if (!seen.has(key)) out.push(`${key}=${sanitized[key]}`);
+    const value = sanitized[key] ?? "";
+    if (value === "") delete process.env[key];
+    else process.env[key] = value;
+  }
+
+  while (out.length > 0 && out[out.length - 1] === "") out.pop();
+  writeFileSync(file, out.join("\n") + "\n", "utf8");
+  reloadConfig();
 }

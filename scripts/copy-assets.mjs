@@ -6,16 +6,18 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "..");
 
-const src = resolve(root, "src", "dashboard");
-const dest = resolve(root, "dist", "dashboard");
+const targets = [
+  { src: resolve(root, "src", "dashboard"), dest: resolve(root, "dist", "dashboard") },
+  { src: resolve(root, "src", "chat"), dest: resolve(root, "dist", "chat") },
+];
 
-if (!existsSync(src)) {
-  console.error(`[copy-assets] dashboard source not found: ${src}`);
-  process.exit(1);
+for (const { src, dest } of targets) {
+  if (!existsSync(src)) {
+    console.error(`[copy-assets] source not found: ${src}`);
+    process.exit(1);
+  }
+  await rm(dest, { recursive: true, force: true });
+  await mkdir(dirname(dest), { recursive: true });
+  await cp(src, dest, { recursive: true });
+  console.log(`[copy-assets] copied ${src} -> ${dest}`);
 }
-
-await rm(dest, { recursive: true, force: true });
-await mkdir(dirname(dest), { recursive: true });
-await cp(src, dest, { recursive: true });
-
-console.log(`[copy-assets] copied ${src} -> ${dest}`);

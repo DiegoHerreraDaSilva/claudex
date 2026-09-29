@@ -88,6 +88,14 @@ export class JevError extends Error {
 
 export type Complexity = "fast" | "balanced" | "strong" | "judgment";
 export type DecisionSource = "jev" | "heuristic";
+export type RouteStage = "implement" | "plan";
+
+export interface RouteDecision {
+  route: RouteStage;
+  probabilities: Record<string, number>;
+  confidence: number;
+  source: DecisionSource;
+}
 
 export interface ComplexityDecision {
   complexity: Complexity;
@@ -113,6 +121,12 @@ export const COMPLEXITY_CRITERIA: Record<string, string> = {
   balanced: "Moderada, poucos arquivos, logica simples",
   strong: "Complexa, multiplos arquivos, logica densa ou integracao entre sistemas",
   judgment: "Requer raciocinio arquitetural profundo ou diagnostico dificil",
+};
+
+export const ROUTE_CRITERIA: Record<string, string> = {
+  implement:
+    "Simples implementacao: mudanca direta, bem definida e localizada, sem necessidade de planejar antes",
+  plan: "Precisa planejar algo: exige decisoes de arquitetura, desenho ou investigacao antes de implementar",
 };
 
 const PARALLEL_THRESHOLD = 0.8;
@@ -233,6 +247,34 @@ export class JevClient {
       };
     } catch {
       return heuristicComplexity(description);
+    }
+  }
+
+  async routeTask(description: string): Promise<RouteDecision> {
+    try {
+      const response = await this.decide(description, {
+        route: {
+          type: "choice",
+          instructions:
+            "A tarefa pede uma simples implementacao direta, ou precisa de planejamento antes de implementar?",
+          criteria: ROUTE_CRITERIA,
+        },
+      });
+      const answer = response.answers["route"];
+      if (answer?.type !== "choice") {
+        throw new JevError("Expected a choice answer for route", {
+          request: { state: description, model: this.config.jevModel, questions: {} },
+        });
+      }
+      const route: RouteStage = answer.choice === "plan" ? "plan" : "implement";
+      return {
+        route,
+        probabilities: answer.probabilities,
+        confidence: answer.confidence,
+        source: "jev",
+      };
+    } catch {
+      return heuristicRoute(description);
     }
   }
 
@@ -395,4 +437,15 @@ export function heuristicComplexity(description: string): ComplexityDecision {
   };
   probabilities[complexity] = 1;
   return { complexity, probabilities, confidence: 0.5, source: "heuristic" };
+}
+
+export function heuristicRoute(description: string): RouteDecision {
+  const { complexity } = heuristicComplexity(description);
+  const route: RouteStage = complexity === "fast" || complexity === "balanced" ? "implement" : "plan";
+  return {
+    route,
+    probabilities: { implement: route === "implement" ? 1 : 0, plan: route === "plan" ? 1 : 0 },
+    confidence: 0.4,
+    source: "heuristic",
+  };
 }

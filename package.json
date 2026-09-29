@@ -1,19 +1,21 @@
 {
-  "name": "jev-orchestrator",
+  "name": "claudex",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Fleet orchestrator routing tasks across Claude Code, Codex and the Jev (TypeSafe) decision API",
+  "description": "Claudex - fleet orchestrator routing tasks across Claude Code, Codex and the Jev (TypeSafe) decision API",
   "engines": {
     "node": ">=22"
   },
   "bin": {
-    "jev": "dist/index.js"
+    "claudex": "dist/index.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/index.js",
+    "app": "electron desktop/main.mjs",
+    "app:web": "node dist/index.js app",
     "smoke:jev": "node dist/smoke/jev.smoke.js",
     "smoke:agents": "node dist/smoke/agents.smoke.js",
     "smoke:worktree": "node dist/smoke/worktree.smoke.js"
@@ -30,6 +32,7 @@
   "devDependencies": {
     "@types/node": "^22.10.5",
     "@types/ws": "^8.5.13",
+    "electron": "^33.2.0",
     "typescript": "^5.7.3"
   }
 }

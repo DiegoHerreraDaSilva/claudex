@@ -12,7 +12,10 @@ export interface WorktreeInfo {
 export interface MergeResult {
   success: boolean;
   conflicts?: string[];
+  reason?: string;
 }
+
+const GIT_IDENTITY = ["-c", "user.name=claudex", "-c", "user.email=claudex@local"];
 
 export class WorktreeError extends Error {
   readonly args: string[];
@@ -71,6 +74,19 @@ export class WorktreeManager {
     return result.stdout;
   }
 
+  /** Stages and commits everything an agent changed in the worktree. */
+  async commit(taskId: string, message: string): Promise<boolean> {
+    const dir = path.join(this.worktreesDir, taskId);
+    await this.run(["add", "-A"], { cwd: dir });
+    const status = await this.run(["status", "--porcelain"], { cwd: dir, allowFailure: true });
+    if (status.stdout.trim().length === 0) return false;
+    await this.run(
+      [...GIT_IDENTITY, "commit", "-m", message],
+      { cwd: dir },
+    );
+    return true;
+  }
+
   async list(): Promise<WorktreeInfo[]> {
     const result = await this.run(["worktree", "list", "--porcelain"]);
     const infos: WorktreeInfo[] = [];
@@ -105,14 +121,19 @@ export class WorktreeManager {
     if (current.stdout.trim() !== targetBranch) {
       await this.run(["checkout", targetBranch]);
     }
-    const merge = await this.run(["merge", "--no-ff", "--no-edit", taskId], { allowFailure: true });
+    const merge = await this.run([...GIT_IDENTITY, "merge", "--no-ff", "--no-edit", taskId], {
+      allowFailure: true,
+    });
     if (merge.code === 0) return { success: true };
-    const conflicts = merge.stdout
-      .split(/\r?\n/)
-      .filter((line) => line.startsWith("CONFLICT"))
-      .map((line) => line.trim());
+    const output = `${merge.stdout}\n${merge.stderr}`.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const conflicts = output.filter((line) => line.startsWith("CONFLICT"));
+    const reason = conflicts.length > 0 ? undefined : output[output.length - 1];
     await this.run(["merge", "--abort"], { allowFailure: true });
-    return { success: false, conflicts };
+    return {
+      success: false,
+      ...(conflicts.length > 0 ? { conflicts } : {}),
+      ...(reason ? { reason } : {}),
+    };
   }
 
   private run(

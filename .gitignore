@@ -1,10 +1,24 @@
+# dependencies
 node_modules/
-dist/
-.env
-.worktrees/
-*.log
 
-# Estado persistente de tarefas (mantemos apenas os diretorios)
+# build output
+dist/
+
+# secrets / local environment
+.env
+.env.local
+
+# orchestrator / app state
+.worktrees/
+.claudex/
+.jev-app/
 tasks/pending/*.json
 tasks/current/*.json
 tasks/complete/*.json
+
+# logs
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
