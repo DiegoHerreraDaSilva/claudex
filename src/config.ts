@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import path, { resolve } from "node:path";
+import { appDataDir } from "./app/paths.js";
 
 export interface OrchestratorConfig {
   typesafeApiKey: string;
@@ -13,6 +14,9 @@ export interface OrchestratorConfig {
   defaultSimpleModel: string;
   defaultComplexModel: string;
   projectRoot: string;
+  dataDir: string;
+  worktreesDir: string;
+  logsDir: string;
 }
 
 function loadDotEnv(root: string): void {
@@ -68,6 +72,7 @@ export function getConfig(): OrchestratorConfig {
   const projectRoot = process.env["CLAUDEX_ROOT"] ?? process.env["JEV_PROJECT_ROOT"] ?? process.cwd();
   loadDotEnv(projectRoot);
   const cacheTtlSeconds = intEnv("JEV_CACHE_TTL", 3600);
+  const dataDir = process.env["CLAUDEX_DATA_DIR"]?.trim() || appDataDir();
   cached = {
     typesafeApiKey: cleanApiKey(process.env["TYPESAFE_API_KEY"]),
     typesafeBaseUrl: process.env["TYPESAFE_BASE_URL"] ?? "https://api.typesafe.ai",
@@ -80,6 +85,9 @@ export function getConfig(): OrchestratorConfig {
     defaultSimpleModel: process.env["DEFAULT_SIMPLE_MODEL"] ?? "sonnet",
     defaultComplexModel: process.env["DEFAULT_COMPLEX_MODEL"] ?? "gpt-6-sol",
     projectRoot,
+    dataDir,
+    worktreesDir: path.join(dataDir, "worktrees"),
+    logsDir: path.join(dataDir, "logs"),
   };
   return cached;
 }

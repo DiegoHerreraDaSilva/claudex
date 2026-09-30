@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { getConfig } from "../dist/config.js";
 import { JevClient } from "../dist/jev.js";
 import { ProjectRegistry } from "../dist/app/projects.js";
+import { bootstrapDataDir } from "../dist/app/bootstrap.js";
 import { ChatService } from "../dist/app/chat.js";
 import { createAppServer } from "../dist/server/appServer.js";
 
@@ -15,14 +16,13 @@ let mainWindow = null;
 let appServer = null;
 
 async function start() {
+  process.env["CLAUDEX_DATA_DIR"] = app.getPath("userData");
   const config = getConfig();
-  const userData = app.getPath("userData");
-  const dataDir = path.join(userData, "data");
-  const worktreesBase = path.join(userData, "worktrees");
+  await bootstrapDataDir(config.projectRoot, config.dataDir, config.logsDir);
 
-  const registry = new ProjectRegistry(dataDir);
+  const registry = new ProjectRegistry(config.dataDir);
   await registry.load();
-  const chat = new ChatService(registry, new JevClient(config), config, worktreesBase);
+  const chat = new ChatService(registry, new JevClient(config), config, config.worktreesDir);
   appServer = createAppServer({ chat, registry, config });
   const port = await appServer.listen(0);
 

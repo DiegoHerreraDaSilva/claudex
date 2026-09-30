@@ -5,6 +5,7 @@ import chalk from "chalk";
 import { getConfig, setEnvValues } from "./config.js";
 import { runAccountAction } from "./accounts.js";
 import { ProjectRegistry } from "./app/projects.js";
+import { bootstrapDataDir } from "./app/bootstrap.js";
 import { ChatService } from "./app/chat.js";
 import { createAppServer } from "./server/appServer.js";
 import { JevClient } from "./jev.js";
@@ -228,11 +229,11 @@ async function commandDashboard(): Promise<number> {
 
 async function commandApp(): Promise<number> {
   const config = getConfig();
-  const dataDir = path.join(config.projectRoot, ".claudex");
-  const worktreesBase = path.join(dataDir, "worktrees");
+  const { dataDir, worktreesDir, logsDir } = config;
+  await bootstrapDataDir(config.projectRoot, dataDir, logsDir);
   const registry = new ProjectRegistry(dataDir);
   await registry.load();
-  const chat = new ChatService(registry, new JevClient(config), config, worktreesBase);
+  const chat = new ChatService(registry, new JevClient(config), config, worktreesDir);
   const srv = createAppServer({ chat, registry, config });
   try {
     const port = await srv.listen(config.wsPort);

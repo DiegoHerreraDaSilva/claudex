@@ -9,6 +9,8 @@ import { isGitRepo } from "../app/git.js";
 import type { ProjectRegistry } from "../app/projects.js";
 import type { OrchestratorConfig } from "../config.js";
 import { getCredentialStatus } from "../prerequisites.js";
+import { envelope } from "./protocol.js";
+import { defaultSettingsHooks, handleSettingsMessage, type SettingsIncoming } from "./settingsChannel.js";
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -101,6 +103,7 @@ export function createAppServer(options: AppServerOptions): AppServer {
   });
 
   const wss = new WebSocketServer({ server });
+  const settingsHooks = defaultSettingsHooks();
   const broadcast = (payload: unknown): void => {
     const encoded = JSON.stringify(payload);
     for (const client of wss.clients) {
@@ -108,31 +111,37 @@ export function createAppServer(options: AppServerOptions): AppServer {
     }
   };
 
-  chat.on("projects:updated", (data) => broadcast({ type: "projects", data: data.projects }));
-  chat.on("chat:message", (data) => broadcast({ type: "chat:message", ...data }));
-  chat.on("chat:routing", (data) => broadcast({ type: "chat:routing", ...data }));
-  chat.on("chat:turn", (data) => broadcast({ type: "chat:turn", ...data }));
-  chat.on("chat:diff", (data) => broadcast({ type: "chat:diff", ...data }));
+  chat.on("projects:updated", (data) => broadcast(envelope({ type: "projects", data: data.projects })));
+  chat.on("chat:message", (data) => broadcast(envelope({ type: "chat:message", ...data })));
+  chat.on("chat:routing", (data) => broadcast(envelope({ type: "chat:routing", ...data })));
+  chat.on("chat:turn", (data) => broadcast(envelope({ type: "chat:turn", ...data })));
+  chat.on("chat:diff", (data) => broadcast(envelope({ type: "chat:diff", ...data })));
 
   wss.on("connection", (socket: WebSocket) => {
     socket.send(
-      JSON.stringify({ type: "projects", data: registry.summaries(chatRunning(chat)) }),
+      JSON.stringify(envelope({ type: "projects", data: registry.summaries(chatRunning(chat)) })),
+    );
+    socket.send(
+      JSON.stringify(envelope({ type: "credentials", data: settingsHooks.getCredentialStatus() })),
     );
     socket.on("message", (raw: Buffer | string) => {
-      let parsed: { type?: string; projectId?: string; text?: string; action?: string };
+      let parsed: SettingsIncoming & { projectId?: string; text?: string };
       try {
-        parsed = JSON.parse(raw.toString());
+        parsed = JSON.parse(raw.toString()) as SettingsIncoming & { projectId?: string; text?: string };
       } catch {
         return;
       }
+      if (handleSettingsMessage(parsed, socket, broadcast, settingsHooks)) return;
       if (parsed.type === "chat:send" && parsed.projectId && typeof parsed.text === "string") {
         void chat.send(parsed.projectId, parsed.text).catch((err: unknown) => {
           socket.send(
-            JSON.stringify({
-              type: "chat:error",
-              projectId: parsed.projectId,
-              error: err instanceof Error ? err.message : String(err),
-            }),
+            JSON.stringify(
+              envelope({
+                type: "chat:error",
+                projectId: parsed.projectId,
+                error: err instanceof Error ? err.message : String(err),
+              }),
+            ),
           );
         });
         return;

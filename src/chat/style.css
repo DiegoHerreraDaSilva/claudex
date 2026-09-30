@@ -69,6 +69,8 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .brand {
@@ -102,11 +104,14 @@ body {
 .project-list {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 0 10px 10px;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
   align-content: start;
   min-height: 0;
+  min-width: 0;
 }
 
 .project {
@@ -115,6 +120,8 @@ body {
   border-radius: 10px;
   padding: 10px 11px;
   cursor: pointer;
+  min-width: 0;
+  overflow: hidden;
   transition: background 0.15s, border-color 0.15s;
 }
 
@@ -131,10 +138,12 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 .project-name {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -147,6 +156,7 @@ body {
   font-size: 10.5px;
   font-family: var(--font-mono);
   margin-top: 3px;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -454,6 +464,144 @@ body {
 .empty {
   color: var(--faint);
   font-style: italic;
+}
+
+/* Settings / credentials */
+.cred-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--faint);
+  display: inline-block;
+  margin-left: 6px;
+}
+
+.cred-dot.warn {
+  background: var(--warn);
+}
+
+.cred-dot.ok {
+  background: var(--ok);
+}
+
+.cred-status {
+  display: grid;
+  gap: 7px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--elev);
+}
+
+.cred-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.cred-line b {
+  color: var(--text);
+  font-weight: 500;
+  font-family: var(--font-mono);
+}
+
+.mode-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mode-chip {
+  font-size: 10px;
+  padding: 1px 9px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  color: var(--muted);
+}
+
+.mode-chip.subscription {
+  color: var(--ok);
+}
+
+.mode-chip.apiKey {
+  color: var(--warn);
+}
+
+.mode-chip.none {
+  color: var(--err);
+}
+
+.mode-detail {
+  color: var(--muted);
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+
+.btn-row {
+  display: flex;
+  gap: 8px;
+}
+
+.small-btn.danger:hover {
+  border-color: var(--err);
+  color: var(--err);
+}
+
+.small-btn:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.clear {
+  color: var(--muted);
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.settings-msg {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.settings-msg.ok {
+  color: var(--ok);
+}
+
+.settings-msg.err {
+  color: var(--err);
+}
+
+.account-log {
+  margin: 0;
+  max-height: 150px;
+  overflow: auto;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+
+.account-log .ok {
+  color: var(--ok);
+}
+
+.account-log .err {
+  color: var(--err);
+}
+
+.account-log .sys {
+  color: var(--accent);
 }
 
 /* Buttons */

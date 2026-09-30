@@ -1,5 +1,7 @@
 # Claudex
 
+🌐 **English** · [Português (BR)](README.pt-BR.md)
+
 **A local-first desktop orchestrator that routes your coding tasks across Claude Code, Codex, and the Jev (TypeSafe) decision API — with a chat interface.**
 
 You describe a task in plain language. Claudex asks Jev (a fast decision model) how the work should be handled, then routes it to the right agent, runs it inside an isolated git worktree of *your* project folder, shows you the diff, and lets you apply or discard it. Everything runs on your machine with **your own accounts and API keys**.

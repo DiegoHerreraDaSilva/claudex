@@ -1,3 +1,119 @@
+const I18N = {
+  pt: {
+    newProject: "+ novo projeto",
+    noProject: "nenhum projeto",
+    stop: "parar",
+    apply: "aplicar",
+    discard: "descartar",
+    settings: "configurações",
+    send: "enviar",
+    composerPlaceholder: "descreva a tarefa para os agentes...",
+    tabDiff: "diff",
+    tabSession: "sessão",
+    newProjectTitle: "novo projeto",
+    close: "fechar",
+    name: "nome",
+    folderLabel: "pasta do projeto (repositório git)",
+    chooseFolder: "escolher pasta",
+    createProject: "criar projeto",
+    chooseFolderTitle: "escolher pasta",
+    up: "subir",
+    selectFolder: "selecionar esta pasta",
+    settingsTitle: "contas e chaves",
+    connectSub: "conectar (assinatura)",
+    connectChatgpt: "conectar (ChatGPT)",
+    disconnect: "desconectar",
+    clearAnthropic: "remover chave e voltar para a assinatura",
+    clearOpenai: "remover chave e voltar para o login ChatGPT",
+    codexModel: "modelo forte do Codex",
+    authLog: "log de autenticação",
+    save: "salvar",
+    typesafePh: "cole a chave de console.typesafe.ai/keys",
+    emptyNoProjects: "nenhum projeto ainda",
+    emptySelect: "crie ou selecione um projeto para começar.",
+    emptyDescribe: "descreva uma tarefa para os agentes começarem.",
+    thinking: "pensando ",
+    noDiff: "sem alterações pendentes",
+    noSession: "sem projeto",
+    gitValid: "repositório git válido",
+    gitInvalid: "não é um repositório git (rode git init)",
+    validateFail: "não foi possível validar",
+    needFolder: "escolha a pasta do projeto",
+    createError: "erro ao criar",
+    browserLoading: "carregando...",
+    browserEmpty: "nenhuma subpasta",
+    browserNoAccess: "sem acesso: ",
+    saved: "salvo em .env e aplicado",
+    saveError: "erro ao salvar",
+    noConnection: "sem conexão com o servidor",
+    roleUser: "você",
+    roleAssistant: "agente",
+    roleTool: "tool",
+    roleResult: "resultado",
+    roleRouting: "roteamento",
+    roleError: "erro",
+    roleSystem: "sistema",
+  },
+  en: {
+    newProject: "+ new project",
+    noProject: "no project",
+    stop: "stop",
+    apply: "apply",
+    discard: "discard",
+    settings: "settings",
+    send: "send",
+    composerPlaceholder: "describe the task for the agents...",
+    tabDiff: "diff",
+    tabSession: "session",
+    newProjectTitle: "new project",
+    close: "close",
+    name: "name",
+    folderLabel: "project folder (git repository)",
+    chooseFolder: "choose folder",
+    createProject: "create project",
+    chooseFolderTitle: "choose folder",
+    up: "up",
+    selectFolder: "select this folder",
+    settingsTitle: "accounts & keys",
+    connectSub: "connect (subscription)",
+    connectChatgpt: "connect (ChatGPT)",
+    disconnect: "disconnect",
+    clearAnthropic: "clear key and use the subscription",
+    clearOpenai: "clear key and use the ChatGPT login",
+    codexModel: "Codex strong model",
+    authLog: "auth log",
+    save: "save",
+    typesafePh: "paste the key from console.typesafe.ai/keys",
+    emptyNoProjects: "no projects yet",
+    emptySelect: "create or select a project to start.",
+    emptyDescribe: "describe a task for the agents to begin.",
+    thinking: "thinking ",
+    noDiff: "no pending changes",
+    noSession: "no project",
+    gitValid: "valid git repository",
+    gitInvalid: "not a git repository (run git init)",
+    validateFail: "could not validate",
+    needFolder: "choose the project folder",
+    createError: "failed to create",
+    browserLoading: "loading...",
+    browserEmpty: "no subfolders",
+    browserNoAccess: "no access: ",
+    saved: "saved to .env and applied",
+    saveError: "failed to save",
+    noConnection: "no connection to the server",
+    roleUser: "you",
+    roleAssistant: "agent",
+    roleTool: "tool",
+    roleResult: "result",
+    roleRouting: "routing",
+    roleError: "error",
+    roleSystem: "system",
+  },
+};
+
+const THEME_KEY = "claudex-theme";
+const LANG_KEY = "claudex-lang";
+
 const state = {
   projects: [],
   currentId: null,
@@ -6,6 +122,7 @@ const state = {
   diffFiles: [],
   running: false,
   routing: null,
+  credentials: null,
   autoscroll: true,
   browserPath: "",
   browserParent: null,
@@ -17,9 +134,13 @@ const els = {
   credSummary: document.getElementById("cred-summary"),
   projName: document.getElementById("proj-name"),
   projMeta: document.getElementById("proj-meta"),
+  stopBtn: document.getElementById("stop-btn"),
   applyBtn: document.getElementById("apply-btn"),
   discardBtn: document.getElementById("discard-btn"),
+  langToggle: document.getElementById("lang-toggle"),
   themeToggle: document.getElementById("theme-toggle"),
+  settingsBtn: document.getElementById("settings-btn"),
+  settingsDot: document.getElementById("settings-dot"),
   transcript: document.getElementById("transcript"),
   composer: document.getElementById("composer"),
   input: document.getElementById("composer-input"),
@@ -40,10 +161,54 @@ const els = {
   browserList: document.getElementById("browser-list"),
   browserUp: document.getElementById("browser-up"),
   browserSelect: document.getElementById("browser-select"),
+  settingsModal: document.getElementById("settings-modal"),
+  settingsClose: document.getElementById("settings-close"),
+  settingsSave: document.getElementById("settings-save"),
+  settingsMsg: document.getElementById("settings-msg"),
+  credStatus: document.getElementById("cred-status"),
+  tsHint: document.getElementById("ts-hint"),
+  claudeMode: document.getElementById("claude-mode"),
+  claudeAccount: document.getElementById("claude-account"),
+  codexMode: document.getElementById("codex-mode"),
+  codexAccount: document.getElementById("codex-account"),
+  inputTypesafe: document.getElementById("input-typesafe"),
+  inputAnthropic: document.getElementById("input-anthropic"),
+  inputOpenai: document.getElementById("input-openai"),
+  inputComplexModel: document.getElementById("input-complex-model"),
+  clearAnthropic: document.getElementById("clear-anthropic"),
+  clearOpenai: document.getElementById("clear-openai"),
+  accountLog: document.getElementById("account-log"),
 };
 
-const THEME_KEY = "claudex-theme";
 let socket = null;
+let lang = "pt";
+
+function t(key, params) {
+  const dict = I18N[lang] ?? I18N.en;
+  let value = dict[key] ?? I18N.en[key] ?? key;
+  if (params) {
+    for (const [k, v] of Object.entries(params)) value = value.split(`{${k}}`).join(String(v));
+  }
+  return value;
+}
+
+function applyStatic() {
+  document.documentElement.lang = lang === "pt" ? "pt-BR" : "en";
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll("[data-i18n-ph]").forEach((el) => {
+    el.placeholder = t(el.dataset.i18nPh);
+  });
+  els.langToggle.textContent = lang === "pt" ? "EN" : "PT";
+}
+
+function setLang(next) {
+  lang = next === "en" ? "en" : "pt";
+  localStorage.setItem(LANG_KEY, lang);
+  applyStatic();
+  render();
+}
 
 function applyTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
@@ -65,7 +230,7 @@ function renderSidebar() {
   if (state.projects.length === 0) {
     const empty = document.createElement("div");
     empty.className = "empty";
-    empty.textContent = "nenhum projeto ainda";
+    empty.textContent = t("emptyNoProjects");
     els.projectList.appendChild(empty);
     return;
   }
@@ -95,10 +260,11 @@ function renderSidebar() {
 function renderHeader() {
   const project = currentProject();
   if (!project) {
-    els.projName.textContent = "nenhum projeto";
+    els.projName.textContent = t("noProject");
     els.projMeta.textContent = "";
     els.applyBtn.disabled = true;
     els.discardBtn.disabled = true;
+    els.stopBtn.disabled = true;
     return;
   }
   els.projName.textContent = project.name;
@@ -109,54 +275,45 @@ function renderHeader() {
     bits.push(state.routing.label ? `${state.routing.label} → ${state.routing.agent}` : state.routing.agent);
   }
   els.projMeta.textContent = bits.join("  •  ");
-
+  els.stopBtn.disabled = !state.running;
   const canAct = state.diffFiles.length > 0 && !state.running;
   els.applyBtn.disabled = !canAct;
   els.discardBtn.disabled = !canAct;
 }
 
+function roleLabel(role) {
+  const map = {
+    user: "roleUser",
+    assistant: "roleAssistant",
+    tool: "roleTool",
+    result: "roleResult",
+    routing: "roleRouting",
+    error: "roleError",
+    system: "roleSystem",
+  };
+  return t(map[role] ?? "roleSystem");
+}
+
 function messageEl(message) {
   const el = document.createElement("div");
   el.className = `msg ${message.role}`;
-
   const who = document.createElement("div");
   who.className = "who";
-  who.textContent = labelFor(message.role);
-
+  who.textContent = roleLabel(message.role);
   const bubble = document.createElement("div");
   bubble.className = "bubble";
   bubble.textContent = message.meta ? `${message.text}\n${message.meta}` : message.text;
-
   el.append(who, bubble);
   return el;
 }
 
-function labelFor(role) {
-  switch (role) {
-    case "user":
-      return "você";
-    case "assistant":
-      return "agente";
-    case "tool":
-      return "tool";
-    case "result":
-      return "resultado";
-    case "routing":
-      return "roteamento";
-    case "error":
-      return "erro";
-    default:
-      return "sistema";
-  }
-}
-
 function renderTranscript() {
-  const project = currentProject();
   els.transcript.replaceChildren();
+  const project = currentProject();
   if (!project) {
     const empty = document.createElement("div");
     empty.className = "empty";
-    empty.textContent = "crie ou selecione um projeto para começar.";
+    empty.textContent = t("emptySelect");
     els.transcript.appendChild(empty);
     return;
   }
@@ -164,21 +321,19 @@ function renderTranscript() {
   if (messages.length === 0) {
     const empty = document.createElement("div");
     empty.className = "empty";
-    empty.textContent = "descreva uma tarefa para os agentes começarem.";
+    empty.textContent = t("emptyDescribe");
     els.transcript.appendChild(empty);
   }
   for (const message of messages) els.transcript.appendChild(messageEl(message));
-
   if (state.running) {
     const typing = document.createElement("div");
     typing.className = "msg assistant typing";
     const bubble = document.createElement("div");
     bubble.className = "bubble";
-    bubble.textContent = "pensando ";
+    bubble.textContent = t("thinking");
     typing.appendChild(bubble);
     els.transcript.appendChild(typing);
   }
-
   if (state.autoscroll) els.transcript.scrollTop = els.transcript.scrollHeight;
 }
 
@@ -191,7 +346,7 @@ function renderDiff() {
     els.diffFiles.appendChild(chip);
   }
   if (!state.diff) {
-    els.diffView.innerHTML = '<span class="empty">sem alterações pendentes</span>';
+    els.diffView.innerHTML = `<span class="empty">${t("noDiff")}</span>`;
     return;
   }
   els.diffView.replaceChildren();
@@ -209,7 +364,7 @@ function renderDiff() {
 function renderSession() {
   const project = currentProject();
   if (!project) {
-    els.tabSession.innerHTML = '<span class="empty">sem projeto</span>';
+    els.tabSession.innerHTML = `<span class="empty">${t("noSession")}</span>`;
     return;
   }
   const p = state.snapshot?.project ?? {};
@@ -262,9 +417,7 @@ async function selectProject(projectId) {
     state.diff = snap.diff || "";
     state.diffFiles = snap.files || [];
     state.running = !!snap.running;
-    if (snap.project?.activeAgent) {
-      state.routing = { agent: snap.project.activeAgent, label: "" };
-    }
+    if (snap.project?.activeAgent) state.routing = { agent: snap.project.activeAgent, label: "" };
     render();
   } catch {
     /* ignore */
@@ -286,15 +439,41 @@ function loadCredentials() {
   fetch("/api/credentials")
     .then((r) => r.json())
     .then((cred) => {
-      const parts = [
-        `claude: ${cred.claude?.mode ?? "?"}`,
-        `codex: ${cred.codex?.mode ?? "?"}`,
-        `jev: ${cred.typesafe?.configured ? "ok" : "off"}`,
-      ];
-      els.credSummary.textContent = parts.join("  ·  ");
-      els.credSummary.className = "muted";
+      state.credentials = cred;
+      renderCredentials();
     })
     .catch(() => undefined);
+}
+
+function renderCredentials() {
+  const cred = state.credentials;
+  if (!cred) return;
+  els.credSummary.textContent = `claude: ${cred.claude?.mode ?? "?"}  ·  codex: ${cred.codex?.mode ?? "?"}  ·  jev: ${cred.typesafe?.configured ? "ok" : "off"}`;
+  if (els.tsHint) els.tsHint.textContent = cred.typesafe?.configured ? `atual: ${cred.typesafe.hint}` : "";
+  if (els.claudeMode) {
+    els.claudeMode.textContent = cred.claude.mode;
+    els.claudeMode.className = `mode-chip ${cred.claude.mode}`;
+  }
+  if (els.claudeAccount) {
+    els.claudeAccount.textContent = cred.claude.mode === "subscription" ? cred.claude.detail : "";
+  }
+  if (els.codexMode) {
+    els.codexMode.textContent = cred.codex.mode;
+    els.codexMode.className = `mode-chip ${cred.codex.mode}`;
+  }
+  if (els.codexAccount) {
+    els.codexAccount.textContent = [cred.codex.account, cred.codex.plan && `(${cred.codex.plan})`].filter(Boolean).join(" ");
+  }
+  if (els.credStatus) {
+    els.credStatus.innerHTML = [
+      `<div class="cred-line"><span>TypeSafe</span><b>${escapeHtml(cred.typesafe?.configured ? cred.typesafe.hint : "—")}</b></div>`,
+      `<div class="cred-line"><span>Claude</span><b>${escapeHtml(cred.claude.mode)}</b></div>`,
+      `<div class="cred-line"><span>Codex</span><b>${escapeHtml(cred.codex.mode)}</b></div>`,
+    ].join("");
+  }
+  const warn = !cred.typesafe?.configured || cred.claude.mode === "none" || cred.codex.mode === "none";
+  if (els.settingsDot) els.settingsDot.className = `cred-dot ${warn ? "warn" : "ok"}`;
+  if (els.inputComplexModel && !els.inputComplexModel.value) els.inputComplexModel.value = cred.complexModel || "";
 }
 
 function sendMessage() {
@@ -317,7 +496,6 @@ function openModal() {
   els.npStatus.className = "np-status";
   els.modal.classList.remove("hidden");
 }
-
 function closeModal() {
   els.modal.classList.add("hidden");
 }
@@ -347,7 +525,6 @@ function openBrowser(startPath) {
   els.browserModal.classList.remove("hidden");
   loadBrowser(startPath || "");
 }
-
 function closeBrowser() {
   els.browserModal.classList.add("hidden");
 }
@@ -357,7 +534,7 @@ async function loadBrowser(target) {
   els.browserList.replaceChildren();
   const loading = document.createElement("div");
   loading.className = "browser-empty";
-  loading.textContent = "carregando...";
+  loading.textContent = t("browserLoading");
   els.browserList.appendChild(loading);
   state.browserPath = target || "";
   try {
@@ -370,20 +547,19 @@ async function loadBrowser(target) {
     if (data.error) {
       const err = document.createElement("div");
       err.className = "browser-empty";
-      err.textContent = `sem acesso: ${data.error}`;
+      err.textContent = `${t("browserNoAccess")}${data.error}`;
       els.browserList.appendChild(err);
     }
     if (data.entries.length === 0 && !data.error) {
       const empty = document.createElement("div");
       empty.className = "browser-empty";
-      empty.textContent = "nenhuma subpasta";
+      empty.textContent = t("browserEmpty");
       els.browserList.appendChild(empty);
     }
     for (const entry of data.entries) {
       const row = document.createElement("div");
       row.className = "browser-row";
       row.onclick = () => loadBrowser(entry.path);
-
       const ico = document.createElement("span");
       ico.className = "ico";
       ico.textContent = "▸";
@@ -423,15 +599,10 @@ async function validatePath() {
       body: JSON.stringify({ rootPath }),
     });
     const data = await res.json();
-    if (data.isGitRepo) {
-      els.npStatus.textContent = "repositório git válido";
-      els.npStatus.className = "np-status ok";
-    } else {
-      els.npStatus.textContent = "não é um repositório git (rode git init)";
-      els.npStatus.className = "np-status err";
-    }
+    els.npStatus.textContent = data.isGitRepo ? t("gitValid") : t("gitInvalid");
+    els.npStatus.className = `np-status ${data.isGitRepo ? "ok" : "err"}`;
   } catch {
-    els.npStatus.textContent = "não foi possível validar";
+    els.npStatus.textContent = t("validateFail");
     els.npStatus.className = "np-status err";
   }
 }
@@ -439,7 +610,7 @@ async function validatePath() {
 async function createProject() {
   const rootPath = els.npPath.value.trim();
   if (!rootPath) {
-    els.npStatus.textContent = "escolha a pasta do projeto";
+    els.npStatus.textContent = t("needFolder");
     els.npStatus.className = "np-status err";
     return;
   }
@@ -452,7 +623,7 @@ async function createProject() {
     });
     const data = await res.json();
     if (!res.ok) {
-      els.npStatus.textContent = data.error || "erro ao criar";
+      els.npStatus.textContent = data.error || t("createError");
       els.npStatus.className = "np-status err";
       return;
     }
@@ -467,12 +638,100 @@ async function createProject() {
   }
 }
 
+function openSettings() {
+  renderCredentials();
+  els.settingsMsg.textContent = "";
+  els.settingsMsg.className = "settings-msg";
+  els.settingsModal.classList.remove("hidden");
+}
+function closeSettings() {
+  els.settingsModal.classList.add("hidden");
+}
+
+function saveSettings() {
+  const values = {};
+  const typesafe = els.inputTypesafe.value.trim();
+  if (typesafe) values.TYPESAFE_API_KEY = typesafe;
+  if (els.clearAnthropic.checked) values.ANTHROPIC_API_KEY = "";
+  else if (els.inputAnthropic.value.trim()) values.ANTHROPIC_API_KEY = els.inputAnthropic.value.trim();
+  if (els.clearOpenai.checked) values.OPENAI_API_KEY = "";
+  else if (els.inputOpenai.value.trim()) values.OPENAI_API_KEY = els.inputOpenai.value.trim();
+  const model = els.inputComplexModel.value.trim();
+  if (model) values.DEFAULT_COMPLEX_MODEL = model;
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    els.settingsMsg.textContent = t("noConnection");
+    els.settingsMsg.className = "settings-msg err";
+    return;
+  }
+  socket.send(JSON.stringify({ type: "settings", values }));
+}
+
+function onSettingsAck(msg) {
+  if (msg.ok) {
+    els.settingsMsg.textContent = t("saved");
+    els.settingsMsg.className = "settings-msg ok";
+    els.inputTypesafe.value = "";
+    els.inputAnthropic.value = "";
+    els.inputOpenai.value = "";
+    els.clearAnthropic.checked = false;
+    els.clearOpenai.checked = false;
+    if (msg.data) {
+      state.credentials = msg.data;
+      renderCredentials();
+    }
+  } else {
+    els.settingsMsg.textContent = msg.error || t("saveError");
+    els.settingsMsg.className = "settings-msg err";
+  }
+}
+
+function pushAccountLog(cls, text) {
+  const line = document.createElement("div");
+  line.className = cls;
+  line.textContent = text;
+  els.accountLog.appendChild(line);
+  els.accountLog.scrollTop = els.accountLog.scrollHeight;
+}
+
+function setAccountButtonsBusy(provider, busy) {
+  document.querySelectorAll(`.small-btn[data-provider="${provider}"]`).forEach((btn) => {
+    btn.disabled = busy;
+  });
+}
+
+function runAccountAction(provider, action) {
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    pushAccountLog("err", t("noConnection"));
+    return;
+  }
+  setAccountButtonsBusy(provider, true);
+  pushAccountLog("sys", `> ${provider} ${action}...`);
+  socket.send(JSON.stringify({ type: "account", provider, action }));
+}
+
 function handleMessage(msg) {
   switch (msg.type) {
     case "projects":
       state.projects = msg.data;
       renderSidebar();
       if (!state.currentId && state.projects.length > 0) selectProject(state.projects[0].id);
+      break;
+    case "credentials":
+      state.credentials = msg.data;
+      renderCredentials();
+      break;
+    case "settings:ack":
+      onSettingsAck(msg);
+      break;
+    case "account:start":
+      pushAccountLog("sys", `# ${msg.provider} ${msg.action}...`);
+      break;
+    case "account:output":
+      pushAccountLog(msg.stream === "stderr" ? "err" : msg.stream === "status" ? "sys" : "", msg.line);
+      break;
+    case "account:done":
+      setAccountButtonsBusy(msg.data?.provider, false);
+      pushAccountLog(msg.data?.ok ? "ok" : "err", `${msg.data?.provider} ${msg.data?.action}: ${msg.data?.ok ? "ok" : msg.data?.message}`);
       break;
     case "chat:message": {
       if (msg.projectId !== state.currentId || !state.snapshot) break;
@@ -494,7 +753,6 @@ function handleMessage(msg) {
       break;
     }
     case "chat:diff": {
-      state.projects = state.projects.map((p) => ({ ...p }));
       if (msg.projectId === state.currentId) {
         state.diff = msg.diff;
         state.diffFiles = msg.files;
@@ -505,12 +763,7 @@ function handleMessage(msg) {
     }
     case "chat:error": {
       if (msg.projectId !== state.currentId || !state.snapshot) break;
-      state.snapshot.project.messages.push({
-        id: String(Date.now()),
-        at: Date.now(),
-        role: "error",
-        text: msg.error,
-      });
+      state.snapshot.project.messages.push({ id: String(Date.now()), at: Date.now(), role: "error", text: msg.error });
       renderTranscript();
       break;
     }
@@ -532,10 +785,19 @@ function connect() {
   socket.onclose = () => setTimeout(connect, 1500);
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+// listeners
 els.newProjectBtn.addEventListener("click", openModal);
 els.modalClose.addEventListener("click", closeModal);
 els.npBrowse.addEventListener("click", browseFolder);
-els.npPath.addEventListener("input", () => validatePath());
+els.npPath.addEventListener("input", validatePath);
 els.npCreate.addEventListener("click", createProject);
 els.modal.addEventListener("click", (event) => {
   if (event.target === els.modal) closeModal();
@@ -551,11 +813,20 @@ els.browserModal.addEventListener("click", (event) => {
   if (event.target === els.browserModal) closeBrowser();
 });
 
+els.settingsBtn.addEventListener("click", openSettings);
+els.settingsClose.addEventListener("click", closeSettings);
+els.settingsSave.addEventListener("click", saveSettings);
+els.settingsModal.addEventListener("click", (event) => {
+  if (event.target === els.settingsModal) closeSettings();
+});
+document.querySelectorAll(".small-btn[data-provider]").forEach((btn) => {
+  btn.addEventListener("click", () => runAccountAction(btn.dataset.provider, btn.dataset.action));
+});
+
 els.composer.addEventListener("submit", (event) => {
   event.preventDefault();
   sendMessage();
 });
-
 els.input.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
@@ -570,7 +841,11 @@ els.applyBtn.addEventListener("click", () => {
 els.discardBtn.addEventListener("click", () => {
   if (state.currentId) socket?.send(JSON.stringify({ type: "chat:action", projectId: state.currentId, action: "discard" }));
 });
+els.stopBtn.addEventListener("click", () => {
+  if (state.currentId) socket?.send(JSON.stringify({ type: "chat:stop", projectId: state.currentId }));
+});
 
+els.langToggle.addEventListener("click", () => setLang(lang === "pt" ? "en" : "pt"));
 els.themeToggle.addEventListener("click", () => {
   const current = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
   const next = current === "dark" ? "light" : "dark";
@@ -581,7 +856,7 @@ els.themeToggle.addEventListener("click", () => {
 document.querySelectorAll(".tab").forEach((tab) => {
   tab.addEventListener("click", () => {
     const name = tab.dataset.tab;
-    document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t === tab));
+    document.querySelectorAll(".tab").forEach((t2) => t2.classList.toggle("active", t2 === tab));
     document.querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("active", p.id === `tab-${name}`));
   });
 });
@@ -590,7 +865,10 @@ els.transcript.addEventListener("scroll", () => {
   state.autoscroll = Math.abs(els.transcript.scrollHeight - els.transcript.scrollTop - els.transcript.clientHeight) < 40;
 });
 
+// init
+lang = localStorage.getItem(LANG_KEY) === "en" ? "en" : "pt";
 initTheme();
+applyStatic();
 loadProjects();
 loadCredentials();
 render();
