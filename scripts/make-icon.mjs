@@ -9,6 +9,13 @@ const outDir = resolve(root, "build");
 const outFile = resolve(outDir, "icon.png");
 
 const SIZE = 1024;
+const MARGIN = 56;
+const RADIUS = 210;
+
+// Brand gradient: Claude purple -> Codex blue (diagonal).
+const COLOR_A = [180, 142, 237];
+const COLOR_B = [122, 162, 247];
+const MARK = [255, 255, 255];
 
 function clamp01(v) {
   return v < 0 ? 0 : v > 1 ? 1 : v;
@@ -20,9 +27,9 @@ function roundedRectDistance(x, y, halfW, halfH, radius) {
   return Math.hypot(dx, dy) - radius;
 }
 
-const bg = [20, 22, 28, 255];
-const ring = [180, 142, 237, 255];
-const dot = [122, 162, 247, 255];
+function lerp(a, b, t) {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+}
 
 const half = SIZE / 2;
 const data = Buffer.alloc(SIZE * SIZE * 4);
@@ -33,19 +40,21 @@ for (let y = 0; y < SIZE; y++) {
     const py = y - half + 0.5;
     const i = (y * SIZE + x) * 4;
 
-    const rectDist = roundedRectDistance(px, py, half - 70, half - 70, 190);
+    const rectDist = roundedRectDistance(px, py, half - MARGIN, half - MARGIN, RADIUS);
     const bgCov = clamp01(0.5 - rectDist * 1.6);
 
+    // Diagonal gradient across the tile.
+    const t = clamp01((x + y) / (2 * (SIZE - 1)));
+    const gradient = lerp(COLOR_A, COLOR_B, t);
+
+    // White "C" ring with a gap on the right.
     const d = Math.hypot(px, py);
     const angle = Math.abs((Math.atan2(py, px) * 180) / Math.PI);
-    const inGap = angle < 42;
-    const outerCov = clamp01(0.5 - (d - 340) * 1.6);
-    const innerCov = clamp01(0.5 - (215 - d) * 1.6);
-    let ringCov = Math.min(outerCov, innerCov);
-    if (inGap) ringCov = 0;
-
-    const dotDist = Math.hypot(px - 330, py - 0);
-    const dotCov = clamp01(0.5 - (dotDist - 58) * 1.6);
+    const inGap = angle < 40;
+    const outerCov = clamp01(0.5 - (d - 336) * 1.6);
+    const innerCov = clamp01(0.5 - (216 - d) * 1.6);
+    let markCov = Math.min(outerCov, innerCov);
+    if (inGap) markCov = 0;
 
     let R = 0;
     let G = 0;
@@ -57,9 +66,8 @@ for (let y = 0; y < SIZE; y++) {
       B = color[2] * cov + B * (1 - cov);
       A = cov + A * (1 - cov);
     };
-    over(bg, bgCov);
-    over(ring, ringCov);
-    over(dot, dotCov);
+    over(gradient, bgCov);
+    over(MARK, markCov);
 
     data[i] = Math.round(R);
     data[i + 1] = Math.round(G);
