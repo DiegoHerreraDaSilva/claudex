@@ -6,6 +6,7 @@ const WORKSPACE_NAV = [
   { view: "home", label: "navHome", icon: "⌂" },
   { view: "workspace", label: "navConversations", icon: "◇" },
   { view: "missions", label: "navMissions", icon: "▣" },
+  { view: "intelligence", label: "intelligenceTitle", icon: "⌕" },
   { view: "worktrees", label: "navWorktrees", icon: "⌘" },
   { view: "memory", label: "navMemory", icon: "◈" },
   { view: "history", label: "navHistory", icon: "⌁" },

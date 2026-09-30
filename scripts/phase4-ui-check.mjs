@@ -9,7 +9,7 @@ import { WebSocketServer } from "ws";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ui = path.join(root, "dist", "chat");
-const output = path.resolve(process.argv[2] || path.join(root, ".claudex", "qa", "phase3"));
+const output = path.resolve(process.argv[2] || path.join(root, ".claudex", "qa", "phase4"));
 mkdirSync(path.join(output, "profile"), { recursive: true });
 app.setPath("userData", path.join(output, "profile"));
 const credentials = {
@@ -70,13 +70,57 @@ let summary = {
     findings: [],
   },
 };
-const events = [];
+const events = [
+  {
+    id: "context",
+    missionId: conversation.id,
+    at: Date.now(),
+    type: "context:loaded",
+    payload: {
+      memory: [{ kind: "convention", text: "Use ESM" }],
+      worktreePath: "C:/worktrees/health",
+      branch: conversation.branch,
+    },
+  },
+];
 const sent = [];
 const errors = [];
+let memories = [{ id: "memory-1", kind: "convention", text: "Use ESM", createdAt: Date.now() }];
+const requests = [];
 let win;
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url, "http://localhost");
+    if (req.method !== "GET") {
+      let raw = "";
+      for await (const chunk of req) raw += chunk;
+      const body = raw ? JSON.parse(raw) : {};
+      requests.push({ path: url.pathname, body });
+      if (url.pathname.endsWith("/memory") && req.method === "POST")
+        memories.push({ id: "memory-2", ...body });
+      if (url.pathname.includes("/memory/") && req.method === "PUT")
+        Object.assign(
+          memories.find((entry) => url.pathname.endsWith(entry.id)),
+          body,
+        );
+      if (url.pathname.includes("/memory/") && req.method === "DELETE")
+        memories = memories.filter((entry) => !url.pathname.endsWith(entry.id));
+      res.setHeader("Content-Type", "application/json");
+      res.end(
+        JSON.stringify(
+          url.pathname === "/api/repo/ask"
+            ? {
+                matches: [
+                  { file: "src/health.ts", line: 1, snippet: "export function health() {}" },
+                ],
+                confidence: 1,
+                method: "lexical",
+              }
+            : { ok: true, code: 0 },
+        ),
+      );
+      return;
+    }
     const toolsPayload = url.pathname.endsWith("/intelligence")
       ? {
           fileCount: 3,
@@ -90,7 +134,7 @@ const server = createServer(async (req, res) => {
           },
         }
       : url.pathname.endsWith("/memory")
-        ? [{ id: "memory-1", kind: "convention", text: "Use ESM", createdAt: Date.now() }]
+        ? memories
         : url.pathname.endsWith("/git")
           ? {
               branches: ["main", "claudex/health"],
@@ -207,7 +251,7 @@ async function evaluate(code) {
 async function waitFor(expression) {
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
-    if (await evaluate(expression)) return;
+    if (typeof expression === "function" ? await expression() : await evaluate(expression)) return;
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   throw new Error(`Timed out: ${expression}`);
@@ -241,112 +285,123 @@ app.whenReady().then(async () => {
     await waitFor("!!document.querySelector('.project-head')");
     await evaluate("document.querySelector('.project-head').click()");
     await waitFor("!!document.querySelector('.workspace-header')");
+    const nav = async (label) =>
+      evaluate(
+        `[...document.querySelectorAll('.nav-item')].find(node => node.textContent.toLowerCase().includes(${JSON.stringify(label)})).click()`,
+      );
+    await nav("inteligência");
+    await waitFor("!!document.querySelector('.architecture-map')");
     await evaluate(
-      "[...document.querySelectorAll('.nav-item')].find(node => /missões|missions/i.test(node.textContent)).click()",
+      "const input = document.querySelector('.tool-form input'); input.value = 'health'; input.dispatchEvent(new Event('input')); document.querySelector('.tool-form').requestSubmit()",
     );
-    await waitFor("!!document.querySelector('.mission-complete.ready')");
-    await waitFor("[...document.querySelectorAll('.mission-complete button')].some(button => /^(apply|aplicar)$/.test(button.textContent) && !button.disabled)");
-    const ready = await evaluate(
-      `({ rows: document.querySelectorAll('.verification-row').length, apply: [...document.querySelectorAll('.mission-complete button')].find(button => /^(apply|aplicar)$/.test(button.textContent))?.disabled, title: document.querySelector('.mission-complete-title').textContent })`,
+    await waitFor("!!document.querySelector('.search-match')");
+    assert.match(
+      await evaluate("document.querySelector('.search-match').textContent"),
+      /src\/health.ts:1/,
     );
-    assert.equal(ready.rows, 5);
-    assert.equal(ready.apply, false);
-    assert.match(ready.title, /CONCLUÍDA|COMPLETE/);
-    await evaluate("document.documentElement.setAttribute('data-theme', 'dark')");
-    assert.equal(
-      await evaluate("getComputedStyle(document.body).backgroundColor"),
-      "rgb(7, 9, 13)",
+    await capture("phase4-intelligence-dark");
+    for (const width of [320, 768, 1024, 1440]) {
+      win.setContentSize(width, 1100);
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      assert.equal(
+        await evaluate(
+          "document.documentElement.scrollWidth > innerWidth || document.querySelector('.tools-view').scrollWidth > document.querySelector('.tools-view').clientWidth",
+        ),
+        false,
+        `Overflow at ${width}`,
+      );
+    }
+    win.setContentSize(1440, 1100);
+    await nav("memória");
+    await waitFor(
+      "[...document.querySelectorAll('.tools-view textarea')].some(node => node.value === 'Use ESM')",
     );
-    await capture("phase3-ready-dark");
+    await evaluate(
+      "{ const draft = document.querySelector('.memory-form textarea'); draft.value = 'Local JSON persistence'; draft.dispatchEvent(new Event('input')); } document.querySelector('.memory-form').requestSubmit()",
+    );
+    await waitFor(
+      "[...document.querySelectorAll('.tool-card:has(.tool-actions) textarea')].some(node => node.value === 'Local JSON persistence')",
+    );
+    await evaluate(
+      "{ const entry = [...document.querySelectorAll('.tool-card')].find(node => node.querySelector('textarea')?.value === 'Use ESM'); entry.querySelector('textarea').value = 'Use ESM updated'; entry.querySelector('.tool-actions button').click(); }",
+    );
+    await waitFor(() => memories.some(entry => entry.text === "Use ESM updated"));
+    await waitFor("[...document.querySelectorAll('.tool-card:has(.tool-actions) textarea')].some(node => node.value === 'Use ESM updated')");
+    await evaluate(
+      "{ const entry = [...document.querySelectorAll('.tool-card')].find(node => node.querySelector('.tool-actions') && node.querySelector('textarea')?.value === 'Local JSON persistence'); entry.querySelectorAll('.tool-actions button')[1].click(); }",
+    );
+    await waitFor(
+      "![...document.querySelectorAll('.tool-card:has(.tool-actions) textarea')].some(node => node.value === 'Local JSON persistence')",
+    );
+    await capture("phase4-memory");
+    await nav("worktrees");
+    await waitFor("document.querySelector('.tools-view').textContent.includes('refs/heads/main')");
+    await nav("histórico");
+    await waitFor(
+      "document.querySelector('.tools-view').textContent.includes('Adicionar endpoint')",
+    );
+    await evaluate("document.querySelector('[data-tab=context]').click()");
+    await waitFor("!!document.querySelector('.checkpoint-row')");
+    await evaluate("document.querySelector('.checkpoint-row button').click()");
+    await waitFor("!!document.querySelector('.confirm-card')");
+    await evaluate("document.querySelector('.confirm-card .primary-btn').click()");
+    await waitFor("document.body.textContent.includes('checkpoint restaurado')");
+    assert(
+      requests.some(
+        (request) =>
+          request.path.endsWith("/restore") && request.body.checkpointId === "checkpoint-1",
+      ),
+    );
+    await evaluate("document.querySelector('[data-tab=terminal]').click()");
+    await evaluate(
+      "{ const terminalInput = document.querySelector('.terminal-form input'); terminalInput.value = 'echo hello'; terminalInput.dispatchEvent(new Event('input')); } document.querySelector('.terminal-form').requestSubmit()",
+    );
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    assert(
+      requests.some(
+        (request) => request.path.endsWith("/terminal") && request.body.command === "echo hello",
+      ),
+    );
+    broadcast({
+      type: "terminal:out",
+      projectId: project.id,
+      runId: "run-1",
+      stream: "stdout",
+      text: "<img onerror=alert(1)>hello\n",
+    });
+    broadcast({
+      type: "terminal:out",
+      projectId: project.id,
+      runId: "run-1",
+      stream: "system",
+      result: { code: 0 },
+    });
+    await waitFor("document.querySelector('.terminal-output').textContent.includes('hello')");
+    assert.equal(await evaluate("document.querySelector('.terminal-output img') === null"), true);
+    await capture("phase4-terminal");
     await evaluate(
       "document.getElementById('lang-toggle').click(); document.getElementById('theme-toggle').click()",
     );
-    await capture("phase3-ready-light-en");
-    for (const width of [320, 768, 1024, 1440]) {
-      win.setContentSize(width, 1100);
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      const overflow = await evaluate(
-        "document.documentElement.scrollWidth > window.innerWidth || document.querySelector('.mission-complete').scrollWidth > document.querySelector('.mission-complete').clientWidth",
-      );
-      assert.equal(overflow, false, `Overflow at ${width}px`);
-    }
+    await nav("intelligence");
+    await waitFor("!!document.querySelector('.architecture-map')");
+    await capture("phase4-intelligence-light-en");
     win.setContentSize(320, 1100);
-    await capture("phase3-mobile");
-    await evaluate(
-      "[...document.querySelectorAll('.mission-complete button')].find(button => /review changes|revisar alterações/i.test(button.textContent)).click()",
-    );
-    assert.equal(
-      await evaluate("getComputedStyle(document.getElementById('right')).display !== 'none'"),
-      true,
-    );
-    await evaluate("document.getElementById('inspector-close').click()");
-    win.setContentSize(1440, 1100);
-    const unsafe = '<img src=x onerror="window.claudexInjected=true">';
-    summary = {
-      ...summary,
-      status: "failed",
-      revision: 21,
-      error: "Tests failed",
-      review: {
-        ...summary.review,
-        approved: false,
-        findings: [
-          {
-            severity: "error",
-            file: "src/health.ts",
-            line: 2,
-            message: "O endpoint não trata falhas.",
-          },
-          { severity: "warning", message: unsafe },
-        ],
-      },
-    };
-    broadcast({ type: "mission:summary", summary });
-    await waitFor("!!document.querySelector('.mission-complete.failed')");
-    assert.equal(
-      await evaluate(
-        "[...document.querySelectorAll('.mission-complete button')].find(button => /^(apply|aplicar)$/.test(button.textContent)).disabled",
-      ),
-      true,
-    );
-    assert.equal(
-      await evaluate(
-        "document.querySelector('.review-finding img') === null && !window.claudexInjected",
-      ),
-      true,
-    );
-    await evaluate("document.querySelector('.verification-row summary').click()");
-    await capture("phase3-findings");
-    await evaluate(
-      "[...document.querySelectorAll('.mission-results button')].find(button => /fix automatically|corrigir automaticamente/i.test(button.textContent)).focus()",
-    );
-    assert.equal(await evaluate("document.activeElement.tagName"), "BUTTON");
-    await evaluate("document.activeElement.click()");
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    assert.equal(
-      sent.some(
-        (message) =>
-          message.type === "chat:send" &&
-          message.text.includes(summary.title) &&
-          message.text.includes("O endpoint não trata falhas."),
-      ),
-      true,
-    );
+    await capture("phase4-mobile");
     assert.deepEqual(errors, []);
     console.log(
       JSON.stringify({
         result: "OK",
         checks: [
-          "ready",
-          "failed apply gate",
-          "five checks",
+          "repository search",
+          "architecture",
+          "memory CRUD",
+          "git",
+          "history",
+          "checkpoints",
+          "terminal escaping",
           "PT/EN",
           "themes",
           "320/768/1024/1440",
-          "mobile diff",
-          "text escaping",
-          "focus",
-          "fix action",
         ],
         screenshots: output,
       }),

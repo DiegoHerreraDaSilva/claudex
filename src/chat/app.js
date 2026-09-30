@@ -1,3 +1,5 @@
+import { renderTerminal, terminalEvent } from "./views/terminal.js";
+import { ensureTools, refreshTools, renderProjectTools, renderContext, toolEvent } from "./views/projectTools.js";
 import * as api from "./lib/api.js";
 import { applyStatic, getLang, initLang, setLang, t, THEME_KEY } from "./lib/i18n.js";
 import { initSocket, isConnected, send as socketSend } from "./lib/socket.js";
@@ -35,14 +37,19 @@ const actions = {
   comingSoon,
   fixAutomatically,
   reviewChanges: showDiff,
+  openInspector,
   reloadMissionSummary: () => loadMissionSummary(state.currentConversationId),
   reloadProjects: loadProjects,
 };
 
 function renderAll() {
+  ensureTools();
+  if (state.currentConversationId) ensureMissionEvents();
   renderSidebar(sidebarRoot, actions);
   renderView();
   renderInspector();
+  renderContext();
+  renderTerminal();
 }
 
 function renderView() {
@@ -57,14 +64,11 @@ function renderView() {
     case "missions":
       renderMissionCenter(viewHost, actions);
       break;
+    case "intelligence":
     case "worktrees":
-      renderPlaceholder(viewHost, "worktreesTitle");
-      break;
     case "memory":
-      renderPlaceholder(viewHost, "memoryTitle");
-      break;
     case "history":
-      renderPlaceholder(viewHost, "historyTitle");
+      renderProjectTools(viewHost, actions);
       break;
     case "agents":
       renderPlaceholder(viewHost, "agentsTitle");
@@ -286,6 +290,9 @@ function comingSoon() {
 
 function onMessage(msg) {
   switch (msg.type) {
+    case "terminal:out":
+      terminalEvent(msg);
+      break;
     case "projects": {
       const projects = msg.data ?? [];
       let conversationId = state.currentConversationId;
@@ -328,7 +335,7 @@ function onMessage(msg) {
     }
     case "chat:turn": {
       if (msg.status === "started") state.running.add(msg.conversationId);
-      else state.running.delete(msg.conversationId);
+      else { state.running.delete(msg.conversationId); if (msg.projectId === state.currentProjectId) refreshTools(); }
       notify();
       break;
     }
@@ -367,6 +374,7 @@ function onMessage(msg) {
     case "mission:event": {
       const event = msg.event;
       if (!event) break;
+      toolEvent(event);
       if (event.missionId === state.currentConversationId) {
         state.missionEvents = [...state.missionEvents, event];
         if (event.type === "router:decided") {
@@ -444,9 +452,13 @@ function buildCommands() {
   return commands;
 }
 
-function showDiff() {
-  switchInspectorTab("diff");
+function openInspector(name) {
+  switchInspectorTab(name);
   if (window.innerWidth <= 1080) document.body.classList.add("inspector-open");
+}
+
+function showDiff() {
+  openInspector("diff");
   const view = document.getElementById("diff-view");
   view?.setAttribute("tabindex", "-1");
   view?.focus();

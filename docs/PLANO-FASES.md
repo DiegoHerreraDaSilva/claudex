@@ -2,17 +2,17 @@
 
 > Documento de handoff. Descreve o estado atual do projeto e o plano detalhado
 > para continuar o desenvolvimento em outras sessões.
-> Última atualização: 30/09/2026, após a implementação da Fase 3.
-> Próxima etapa: Fase 4. Ver [entrega da Fase 3](FASE-3.md).
+> Última atualização: 30/09/2026, após a implementação da Fase 4.
+> Próxima etapa: Fase 5. Ver [entrega da Fase 4](FASE-4.md).
 
 ---
 
 ## 0. Como retomar (checklist rápido)
 
 1. `cd C:\Users\dherrera\Desktop\Claudex`
-2. `git pull` (branch `main`, repo `https://github.com/DiegoHerreraDaSilva/claudex`).
+2. `git status` e retomar a branch local `codex/phase4-intelligence`; consultar o remoto antes de sincronizar alterações.
 3. `npm install` (se necessário).
-4. `npm run build && npm run lint && npm test` — deve estar tudo verde (45 testes).
+4. `npm run build && npm run lint && npm test` — deve estar tudo verde (51 testes).
 5. Subir a UI para inspecionar: `npm run app:web` (porta 8080) e rodar
    `npm run ui:check -- http://127.0.0.1:8080` (script headless que captura erros de console).
 6. Ler a seção da fase desejada (Fase 3 → seção 7, etc.).
@@ -49,6 +49,7 @@ ESM sem bundler**. SDKs: `@anthropic-ai/claude-agent-sdk`, `@openai/codex-sdk`,
 | 1 | Novo shell (ESM), design tokens, Home, command palette, toasts | `3135500` |
 | 2 | Mission Center (timeline, agent cards, task graph), intent preview, interrupt | `c1df1fa` |
 | 3 | Verification & Review, correção limitada, resumo persistido e resultado da missão | ver [FASE-3.md](FASE-3.md) |
+| 4 | Inteligência, busca, memória, contexto, terminal, checkpoints, Git e histórico | ver [FASE-4.md](FASE-4.md) |
 
 ### Base anterior (linha de base)
 - `6d7d132` — v0.1.8, app com projetos/conversas, worktrees, routing Jev, Claude/Codex, dashboard legado.
@@ -305,6 +306,8 @@ automaticamente", e fechar numa tela **MISSION COMPLETE**.
 ---
 
 ## 8. Fase 4 — Intelligence
+
+**Concluída em 30/09/2026.** Comportamento, limites, API e verificação em [FASE-4.md](FASE-4.md). O escopo abaixo fica como referência.
 
 **Objetivo:** repo map, ask-repo, memória do projeto, context inspector,
 terminal, git workspace, checkpoints e histórico de missões.

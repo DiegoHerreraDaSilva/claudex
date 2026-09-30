@@ -65,3 +65,9 @@ export async function getMissionSummary(missionId) {
   if (!res.ok) throw new Error(`mission summary ${res.status}`);
   return res.json();
 }
+export async function request(url, method = "GET", body) {
+  const response = await fetch(url, { method, ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }) });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error ?? `${response.status}`);
+  return data;
+}
