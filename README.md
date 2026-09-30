@@ -47,11 +47,12 @@ If the TypeSafe API is unavailable (no key, `429`/`529`/`5xx`), Claudex falls ba
 ## Features
 
 - **Desktop chat app** (Electron) with a **native folder picker**, plus a browser mode.
-- **Projects**: register any folder that is a git repository; each project keeps its own conversation.
+- **Projects + conversations**: register any git repo; create multiple conversations per project, each with its **own branch and worktree** (isolated diffs), rename/delete them.
 - **Continuous sessions**: follow-ups resume the same Claude `session_id` or Codex `thread_id`.
 - **Isolated git worktrees**: agents never touch your working tree directly.
 - **Manual review**: an **Apply** / **Discard** bar shows the diff of what the agents changed.
 - **In-app credentials**: connect/disconnect Claude and Codex, paste API keys, see account/plan.
+- **Plan usage**: Claude 5h/7d utilization (experimental) and Codex token totals.
 - **Local-first & private**: no telemetry; credentials and keys stay on your machine.
 - **CLI + live dashboard** for scripted, non-interactive runs.
 - **Dark / light theme**.
@@ -106,6 +107,12 @@ npm run app:web
 ```
 
 On Windows you can create a desktop shortcut to `npm run app` (see `desktop/`).
+
+**Build a desktop installer** (electron-builder):
+
+```bash
+npm run dist   # Windows: nsis · macOS: dmg · Linux: AppImage (output in release/)
+```
 
 ---
 
