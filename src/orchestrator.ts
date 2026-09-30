@@ -52,7 +52,12 @@ const reviewSchema = z.object({
   summary: z.string(),
 });
 
-const REVIEW_JSON_SCHEMA = z.toJSONSchema(reviewSchema) as Record<string, unknown>;
+const REVIEW_JSON_SCHEMA = (() => {
+  const schema = z.toJSONSchema(reviewSchema) as Record<string, unknown>;
+  delete schema["$schema"];
+  delete schema["$id"];
+  return schema;
+})();
 
 export class Orchestrator extends TypedEmitter<OrchestratorEventMap> {
   private readonly tasks = new Map<string, InternalTask>();

@@ -78,7 +78,12 @@ const planSchema = z.object({
   complexity: z.enum(["complex", "simple"]),
   plan: z.string(),
 });
-const PLAN_JSON_SCHEMA = z.toJSONSchema(planSchema) as Record<string, unknown>;
+const PLAN_JSON_SCHEMA = (() => {
+  const schema = z.toJSONSchema(planSchema) as Record<string, unknown>;
+  delete schema["$schema"];
+  delete schema["$id"];
+  return schema;
+})();
 
 export class ChatService extends TypedEmitter<ChatEvents> {
   private readonly running = new Set<string>();
