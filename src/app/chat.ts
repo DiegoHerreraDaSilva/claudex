@@ -1,24 +1,19 @@
 import { existsSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { v4 as uuid } from "uuid";
-import { z } from "zod";
-import { runClaudeAgent, CLAUDE_TOOLS } from "../agents/claude.js";
-import { runCodexAgent } from "../agents/codex.js";
+import { MissionService } from "../application/missionService.js";
+import type { MissionChannel } from "../application/missionService.js";
 import type { OrchestratorConfig } from "../config.js";
+import { parseDiffFiles } from "../domain/diff.js";
+import type { TaskEvent } from "../domain/event.js";
 import { TypedEmitter } from "../events.js";
-import { JevClient } from "../jev.js";
+import { EventStore } from "../infrastructure/persistence/eventStore.js";
+import type { JevClient } from "../jev.js";
 import {
-  addWorktree,
-  branchExists,
   checkout,
-  commitAll,
-  commitWorkingTree,
-  createInitialCommit,
   currentBranch,
   deleteBranch,
   diffAgainst,
-  hasCommits,
   mergeBranch,
   removeWorktree,
   resetHard,
@@ -27,7 +22,6 @@ import {
   ProjectRegistry,
   type ChatMessage,
   type ChatRole,
-  type Conversation,
   type Project,
 } from "./projects.js";
 
@@ -60,6 +54,7 @@ export interface ChatEvents {
     error?: string;
   };
   "chat:diff": ChatDiff;
+  "mission:event": TaskEvent;
 }
 
 export interface ConversationDiff {
@@ -75,30 +70,23 @@ export interface ChatSnapshot {
   diffs: Record<string, ConversationDiff>;
 }
 
-const planSchema = z.object({
-  complexity: z.enum(["complex", "simple"]),
-  plan: z.string(),
-});
-const PLAN_JSON_SCHEMA = (() => {
-  const schema = z.toJSONSchema(planSchema) as Record<string, unknown>;
-  delete schema["$schema"];
-  delete schema["$id"];
-  return schema;
-})();
-
 export class ChatService extends TypedEmitter<ChatEvents> {
   private readonly running = new Set<string>();
   private readonly diffs = new Map<string, ChatDiff>();
   private readonly aborts = new Map<string, AbortController>();
-  private readonly lastAssistantText = new Map<string, string>();
+  private readonly store: EventStore;
+  private readonly missions: MissionService;
 
   constructor(
     private readonly registry: ProjectRegistry,
     private readonly jev: JevClient,
     private readonly config: OrchestratorConfig,
     private readonly worktreesBase: string,
+    eventStore?: EventStore,
   ) {
     super();
+    this.store = eventStore ?? new EventStore(path.join(config.dataDir, "missions"));
+    this.missions = new MissionService(registry, jev, config, worktreesBase, this.store);
   }
 
   get registryRef(): ProjectRegistry {
@@ -111,6 +99,10 @@ export class ChatService extends TypedEmitter<ChatEvents> {
 
   emitProjects(): void {
     this.emit("projects:updated", { projects: this.registry.summaries(this.running) });
+  }
+
+  async missionEvents(missionId: string): Promise<TaskEvent[]> {
+    return this.store.read(missionId);
   }
 
   async snapshot(projectId: string): Promise<ChatSnapshot | null> {
@@ -133,7 +125,7 @@ export class ChatService extends TypedEmitter<ChatEvents> {
           const diff = await diffAgainst(conversation.worktreePath, project.baseBranch);
           diffs[conversation.id] = {
             diff,
-            files: parseFiles(diff),
+            files: parseDiffFiles(diff),
             branch: conversation.branch,
             baseBranch: project.baseBranch,
           };
@@ -159,155 +151,37 @@ export class ChatService extends TypedEmitter<ChatEvents> {
     const controller = new AbortController();
     this.aborts.set(conversationId, controller);
 
+    const channel: MissionChannel = {
+      message: async (role, message, meta, code) => {
+        await this.push(projectId, conversationId, role, message, meta, code);
+      },
+      routing: (event) => this.emit("chat:routing", { projectId, conversationId, ...event }),
+      diff: (diff, files, branch, baseBranch) => {
+        const chatDiff: ChatDiff = { projectId, conversationId, diff, files, branch, baseBranch };
+        this.diffs.set(conversationId, chatDiff);
+        this.emit("chat:diff", chatDiff);
+      },
+      event: (event) => this.emit("mission:event", event),
+    };
+
     try {
-      const { worktreePath, baseBranch, branch } = await this.ensureWorktree(project, conversation);
-      const route = await this.jev.routeTask(text);
-
-      if (route.route === "implement") {
-        this.emitRouting(projectId, conversationId, {
-          agent: "claude:sonnet",
-          model: "sonnet",
-          label: "simples implementacao",
-          stage: "route",
-          confidence: route.confidence,
-          source: route.source,
-        });
-        await this.push(
-          projectId,
-          conversationId,
-          "routing",
-          `Jev: simples implementacao -> Sonnet (conf ${route.confidence.toFixed(2)}, ${route.source})`,
-          undefined,
-          "route.implement",
-        );
-        const run = await runClaudeAgent({
-          prompt: text,
-          model: "sonnet",
-          worktreePath,
-          allowedTools: [...CLAUDE_TOOLS.implementer],
-          maxTurns: 30,
-          timeoutMs: this.config.agentTimeoutMs,
-          signal: controller.signal,
-          ...(conversation.claudeSessionId ? { resumeSessionId: conversation.claudeSessionId } : {}),
-          onMessage: (message) => this.streamClaude(projectId, conversationId, message),
-        });
-        await this.registry.updateConversation(projectId, conversationId, {
-          claudeSessionId: run.sessionId,
-          activeAgent: "claude:sonnet",
-        });
-        await this.addUsage(projectId, conversationId, run.usage);
-      } else {
-        this.emitRouting(projectId, conversationId, {
-          agent: "claude:opus",
-          model: "opus",
-          label: "precisa planejar",
-          stage: "route",
-          confidence: route.confidence,
-          source: route.source,
-        });
-        await this.push(
-          projectId,
-          conversationId,
-          "routing",
-          `Jev: precisa planejar -> Opus (conf ${route.confidence.toFixed(2)}, ${route.source})`,
-          undefined,
-          "route.plan",
-        );
-
-        const planner = await runClaudeAgent({
-          prompt: buildPlannerPrompt(text),
-          model: "opus",
-          worktreePath,
-          allowedTools: [...CLAUDE_TOOLS.planner],
-          maxTurns: 8,
-          timeoutMs: this.config.agentTimeoutMs,
-          signal: controller.signal,
-          outputSchema: PLAN_JSON_SCHEMA,
-        });
-        const plan = parsePlan(planner.result);
-        await this.addUsage(projectId, conversationId, planner.usage);
-        const complex = plan.complexity === "complex";
-        const workerPrompt = `${text}\n\nPlano aprovado:\n${plan.plan}`;
-        await this.push(projectId, conversationId, "assistant", plan.plan);
-
-        if (complex) {
-          const label = `codex:${this.config.defaultComplexModel}`;
-          this.emitRouting(projectId, conversationId, {
-            agent: label,
-            model: this.config.defaultComplexModel,
-            label: "feature complexa",
-            stage: "plan",
-            confidence: 1,
-            source: "planner",
-          });
-          await this.push(
-            projectId,
-            conversationId,
-            "routing",
-            `Opus: feature complexa -> ${this.config.defaultComplexModel}`,
-            undefined,
-            "plan.complex",
-          );
-          const run = await runCodexAgent({
-            prompt: workerPrompt,
-            worktreePath,
-            model: this.config.defaultComplexModel,
-            timeoutMs: this.config.agentTimeoutMs,
-            signal: controller.signal,
-            ...(conversation.codexThreadId ? { resumeThreadId: conversation.codexThreadId } : {}),
-            onEvent: (event) => this.streamCodex(projectId, conversationId, event),
-          });
-          await this.registry.updateConversation(projectId, conversationId, {
-            codexThreadId: run.threadId,
-            activeAgent: label,
-          });
-          await this.addUsage(projectId, conversationId, run.usage);
-        } else {
-          this.emitRouting(projectId, conversationId, {
-            agent: "claude:sonnet",
-            model: "sonnet",
-            label: "feature mais simples",
-            stage: "plan",
-            confidence: 1,
-            source: "planner",
-          });
-          await this.push(projectId, conversationId, "routing", "Opus: feature mais simples -> Sonnet", undefined, "plan.simple");
-          const run = await runClaudeAgent({
-            prompt: workerPrompt,
-            model: "sonnet",
-            worktreePath,
-            allowedTools: [...CLAUDE_TOOLS.implementer],
-            maxTurns: 30,
-            timeoutMs: this.config.agentTimeoutMs,
-            signal: controller.signal,
-            ...(conversation.claudeSessionId ? { resumeSessionId: conversation.claudeSessionId } : {}),
-            onMessage: (message) => this.streamClaude(projectId, conversationId, message),
-          });
-          await this.registry.updateConversation(projectId, conversationId, {
-            claudeSessionId: run.sessionId,
-            activeAgent: "claude:sonnet",
-          });
-          await this.addUsage(projectId, conversationId, run.usage);
-        }
-      }
-
-      await commitAll(worktreePath, text);
-      const diff = await diffAgainst(worktreePath, baseBranch);
-      const chatDiff: ChatDiff = {
+      await this.missions.run({
         projectId,
         conversationId,
-        diff,
-        files: parseFiles(diff),
-        branch,
-        baseBranch,
-      };
-      this.diffs.set(conversationId, chatDiff);
-      this.emit("chat:diff", chatDiff);
+        text,
+        signal: controller.signal,
+        channel,
+      });
       this.emit("chat:turn", { projectId, conversationId, status: "completed" });
     } catch (err) {
       const stopped = controller.signal.aborted;
       const message = err instanceof Error ? err.message : String(err);
-      await this.push(projectId, conversationId, stopped ? "system" : "error", stopped ? "stopped by user" : message);
+      await this.push(
+        projectId,
+        conversationId,
+        stopped ? "system" : "error",
+        stopped ? "stopped by user" : message,
+      );
       this.emit("chat:turn", {
         projectId,
         conversationId,
@@ -401,71 +275,6 @@ export class ChatService extends TypedEmitter<ChatEvents> {
     this.emitProjects();
   }
 
-  private async ensureWorktree(
-    project: Project,
-    conversation: Conversation,
-  ): Promise<{ worktreePath: string; branch: string; baseBranch: string }> {
-    const root = project.rootPath;
-    if (!(await hasCommits(root))) {
-      await createInitialCommit(root);
-      await this.push(
-        project.id,
-        conversation.id,
-        "system",
-        "repositório sem commits: criei um commit inicial com os arquivos atuais",
-      );
-    } else if (await commitWorkingTree(root, "chore: claudex snapshot before task")) {
-      await this.push(
-        project.id,
-        conversation.id,
-        "system",
-        "havia alterações não commitadas: criei um snapshot para o worktree espelhar a pasta",
-      );
-    }
-    const baseBranch = project.baseBranch ?? (await currentBranch(root));
-    const branch = conversation.branch ?? `claudex/${project.id.slice(0, 6)}-${conversation.id.slice(0, 6)}`;
-    const worktreePath = conversation.worktreePath ?? path.join(this.worktreesBase, conversation.id);
-
-    await mkdir(this.worktreesBase, { recursive: true });
-    const ready = existsSync(worktreePath) && existsSync(path.join(worktreePath, ".git"));
-    if (!ready) {
-      await removeWorktree(root, worktreePath);
-      if (await branchExists(root, branch)) {
-        await addWorktree(root, worktreePath, branch);
-      } else {
-        await addWorktree(root, worktreePath, branch, baseBranch);
-      }
-    }
-    await this.registry.update(project.id, { baseBranch });
-    await this.registry.updateConversation(project.id, conversation.id, { branch, worktreePath });
-    return { worktreePath, branch, baseBranch };
-  }
-
-  private async addUsage(
-    projectId: string,
-    conversationId: string,
-    usage: { inputTokens: number; outputTokens: number },
-  ): Promise<void> {
-    const conversation = this.registry.getConversation(projectId, conversationId);
-    if (!conversation) return;
-    const prev = conversation.usage ?? { inputTokens: 0, outputTokens: 0, runs: 0 };
-    await this.registry.updateConversation(projectId, conversationId, {
-      usage: {
-        inputTokens: prev.inputTokens + usage.inputTokens,
-        outputTokens: prev.outputTokens + usage.outputTokens,
-        runs: prev.runs + 1,
-      },
-    });
-  }
-
-  private emitRouting(
-    projectId: string,
-    conversationId: string,
-    data: Omit<ChatEvents["chat:routing"], "projectId" | "conversationId">,
-  ): void {
-    this.emit("chat:routing", { projectId, conversationId, ...data });
-  }
-
   private async push(
     projectId: string,
     conversationId: string,
@@ -486,97 +295,4 @@ export class ChatService extends TypedEmitter<ChatEvents> {
     this.emit("chat:message", { projectId, conversationId, message });
     return message;
   }
-
-  private streamClaude(projectId: string, conversationId: string, message: unknown): void {
-    const record = message as { type?: string; subtype?: string; session_id?: string };
-    if (record.type === "system" && record.subtype === "init") {
-      void this.push(projectId, conversationId, "system", `session ${record.session_id ?? "?"}`);
-      return;
-    }
-    if (record.type === "assistant") {
-      const content = (message as { message?: { content?: unknown[] } }).message?.content ?? [];
-      for (const block of content) {
-        const item = block as { type?: string; text?: string; name?: string; input?: unknown };
-        if (item.type === "text" && item.text) {
-          this.lastAssistantText.set(conversationId, item.text.trim());
-          void this.push(projectId, conversationId, "assistant", item.text);
-        } else if (item.type === "tool_use") {
-          void this.push(projectId, conversationId, "tool", item.name ?? "tool", shortJson(item.input));
-        }
-      }
-      return;
-    }
-    if (record.type === "result" && record.subtype === "success") {
-      const text = ((message as { result?: string }).result ?? "").trim();
-      if (text && text !== this.lastAssistantText.get(conversationId)) {
-        void this.push(projectId, conversationId, "result", text);
-      }
-    }
-  }
-
-  private streamCodex(projectId: string, conversationId: string, event: unknown): void {
-    const e = event as {
-      type?: string;
-      thread_id?: string;
-      item?: { type?: string; text?: string; command?: string; changes?: unknown[] };
-    };
-    if (e.type === "thread.started") {
-      void this.push(projectId, conversationId, "system", `thread ${e.thread_id ?? "?"}`);
-      return;
-    }
-    if (e.type !== "item.completed" && e.type !== "item.started" && e.type !== "item.updated") return;
-    const item = e.item;
-    if (!item) return;
-    if (item.type === "agent_message" && item.text) void this.push(projectId, conversationId, "assistant", item.text);
-    else if (item.type === "reasoning" && item.text) void this.push(projectId, conversationId, "assistant", item.text);
-    else if (item.type === "command_execution" && item.command) void this.push(projectId, conversationId, "tool", item.command);
-    else if (item.type === "file_change" && item.changes) {
-      void this.push(projectId, conversationId, "tool", "file_change", shortJson(item.changes));
-    }
-  }
-}
-
-function buildPlannerPrompt(task: string): string {
-  return [
-    "Voce e um arquiteto de software. Analise a tarefa e produza um plano de implementacao conciso.",
-    "Decida se e uma FEATURE COMPLEXA (multiplos arquivos, integracoes, logica densa) ou uma FEATURE MAIS SIMPLES (mudanca focada).",
-    'Responda APENAS com JSON valido no formato: { "complexity": "complex" | "simple", "plan": string }',
-    "",
-    `Tarefa: ${task}`,
-  ].join("\n");
-}
-
-function parsePlan(text: string): { complexity: "complex" | "simple"; plan: string } {
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start !== -1 && end > start) {
-    try {
-      const parsed = JSON.parse(text.slice(start, end + 1)) as { complexity?: unknown; plan?: unknown };
-      return {
-        complexity: parsed.complexity === "complex" ? "complex" : "simple",
-        plan: typeof parsed.plan === "string" ? parsed.plan : text,
-      };
-    } catch {
-      /* fall through */
-    }
-  }
-  return { complexity: "simple", plan: text.slice(0, 800) };
-}
-
-function shortJson(value: unknown): string {
-  try {
-    const text = typeof value === "string" ? value : JSON.stringify(value);
-    return text.slice(0, 300);
-  } catch {
-    return "";
-  }
-}
-
-function parseFiles(diff: string): string[] {
-  const files = new Set<string>();
-  for (const line of diff.split(/\r?\n/)) {
-    const match = /^diff --git a\/(.+?) b\/(.+)$/.exec(line);
-    if (match?.[2]) files.add(match[2]);
-  }
-  return [...files];
 }

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { runClaudeAgent, CLAUDE_TOOLS } from "./agents/claude.js";
 import { runCodexAgent } from "./agents/codex.js";
 import { AgentError, agentForComplexity, type AgentSpec } from "./agents/types.js";
+import { runPool } from "./application/orchestrationService.js";
 import type { OrchestratorConfig } from "./config.js";
 import {
   TypedEmitter,
@@ -532,19 +533,6 @@ function addUsage(
 ): void {
   snapshot.usage.inputTokens += usage.inputTokens;
   snapshot.usage.outputTokens += usage.outputTokens;
-}
-
-async function runPool<T>(items: T[], limit: number, worker: (item: T) => Promise<void>): Promise<void> {
-  const queue = [...items];
-  const size = Math.max(1, Math.min(limit, queue.length));
-  const runners = Array.from({ length: size }, async () => {
-    while (queue.length > 0) {
-      const item = queue.shift();
-      if (item === undefined) break;
-      await worker(item);
-    }
-  });
-  await Promise.allSettled(runners);
 }
 
 function buildPrompt(overview: string, description: string): string {

@@ -82,6 +82,10 @@ export function createAppServer(options: AppServerOptions): AppServer {
             }),
             { inputTokens: 0, outputTokens: 0, runs: 0 },
           );
+        const costUsd = registry
+          .list()
+          .flatMap((project) => project.conversations)
+          .reduce((acc, conversation) => acc + (conversation.costUsd ?? 0), 0);
         return json(res, 200, {
           claude,
           codex: {
@@ -90,6 +94,7 @@ export function createAppServer(options: AppServerOptions): AppServer {
             plan: cred.codex.plan ?? null,
           },
           tokens,
+          costUsd: Math.round(costUsd * 1e6) / 1e6,
           experimental: true,
           note:
             cred.codex.mode === "subscription"
@@ -118,6 +123,12 @@ export function createAppServer(options: AppServerOptions): AppServer {
       }
       if (url.pathname === "/api/fs/list" && method === "GET") {
         return json(res, 200, await listDirectory(url.searchParams.get("path") ?? ""));
+      }
+
+      const missionEventsMatch = /^\/api\/missions\/([^/]+)\/events$/.exec(url.pathname);
+      if (missionEventsMatch?.[1] && method === "GET") {
+        const missionId = decodeURIComponent(missionEventsMatch[1]);
+        return json(res, 200, await chat.missionEvents(missionId));
       }
 
       const conversationMatch = /^\/api\/projects\/([^/]+)\/conversations\/([^/]+)$/.exec(url.pathname);
@@ -164,6 +175,7 @@ export function createAppServer(options: AppServerOptions): AppServer {
   chat.on("chat:routing", (data) => broadcast(envelope({ type: "chat:routing", ...data })));
   chat.on("chat:turn", (data) => broadcast(envelope({ type: "chat:turn", ...data })));
   chat.on("chat:diff", (data) => broadcast(envelope({ type: "chat:diff", ...data })));
+  chat.on("mission:event", (data) => broadcast(envelope({ type: "mission:event", event: data })));
 
   wss.on("connection", (socket: WebSocket) => {
     socket.send(

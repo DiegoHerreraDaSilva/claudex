@@ -27,6 +27,7 @@ export interface Conversation {
   branch?: string;
   worktreePath?: string;
   usage?: { inputTokens: number; outputTokens: number; runs: number };
+  costUsd?: number;
 }
 
 export interface Project {
@@ -47,6 +48,7 @@ export interface ConversationSummary {
   running: boolean;
   activeAgent?: string;
   branch?: string;
+  costUsd?: number;
 }
 
 export interface ProjectSummary {
@@ -251,6 +253,7 @@ export class ProjectRegistry {
         running: runningConversations.has(conversation.id),
         ...(conversation.activeAgent ? { activeAgent: conversation.activeAgent } : {}),
         ...(conversation.branch ? { branch: conversation.branch } : {}),
+        ...(conversation.costUsd ? { costUsd: conversation.costUsd } : {}),
       }));
       return {
         id: project.id,
