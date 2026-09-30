@@ -10,5 +10,6 @@ export interface VerificationRun {
   summary: string;
   output?: string;
   durationMs?: number;
+  testCount?: number;
   at: number;
 }
