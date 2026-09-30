@@ -39,6 +39,7 @@ export async function runCodexAgent(options: RunCodexAgentOptions): Promise<Code
     skipGitRepoCheck: false,
     sandboxMode: options.sandboxMode ?? "workspace-write",
     approvalPolicy: options.approvalPolicy ?? "never",
+    networkAccessEnabled: true,
     ...(options.model ? { model: options.model } : {}),
     ...(options.reasoningEffort ? { modelReasoningEffort: options.reasoningEffort } : {}),
   };
