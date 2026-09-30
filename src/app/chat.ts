@@ -18,7 +18,7 @@ import { buildPreview, type MissionPreview } from "../application/missionPreview
 import type { OrchestratorConfig } from "../config.js";
 import { parseDiffFiles } from "../domain/diff.js";
 import type { MissionSummary } from "../domain/missionSummary.js";
-import type { TaskEvent } from "../domain/event.js";
+import type { MissionEventInput, TaskEvent } from "../domain/event.js";
 import { TypedEmitter } from "../events.js";
 import { EventStore } from "../infrastructure/persistence/eventStore.js";
 import type { JevClient } from "../jev.js";
@@ -546,6 +546,17 @@ export class ChatService extends TypedEmitter<ChatEvents> {
     }
     await this.registry.remove(projectId);
     this.emitProjects();
+  }
+
+  async recordMissionEvent(missionId: string, input: MissionEventInput): Promise<void> {
+    await this.missions.record(
+      missionId,
+      {
+        event: (event) => this.emit("mission:event", event),
+        summary: (summary) => this.emit("mission:summary", summary),
+      },
+      input,
+    );
   }
 
   private async recordAction(

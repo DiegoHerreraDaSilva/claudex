@@ -1,3 +1,5 @@
+import { MissionGitHubService } from "../application/missionGitHubService.js";
+import { GitHubError } from "../infrastructure/github.js";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import { commandAction } from "../application/permissionBroker.js";
@@ -21,6 +23,7 @@ export function projectToolsRoutes(
   worktreesBase: string,
   emit: (event: TerminalOutput) => void,
 ) {
+  const github = new MissionGitHubService(chat, registry, worktreesBase);
   const memory = new MemoryService(path.join(dataDir, "memory"));
   const checkpoints = new CheckpointService(path.join(dataDir, "checkpoints"));
   const terminal = new TerminalService();
@@ -46,7 +49,8 @@ export function projectToolsRoutes(
       /^\/api\/projects\/([^/]+)\/(intelligence|memory|git|missions|terminal)(?:\/([^/]+))?$/.exec(
         url.pathname,
       );
-    const missionMatch = /^\/api\/missions\/([^/]+)\/(checkpoints|restore)$/.exec(url.pathname);
+    const missionMatch =
+      /^\/api\/missions\/([^/]+)\/(checkpoints|restore|pr|checks|pr\/preview)$/.exec(url.pathname);
     const autonomyMatch = /^\/api\/projects\/([^/]+)\/conversations\/([^/]+)\/autonomy$/.exec(
       url.pathname,
     );
@@ -110,6 +114,26 @@ export function projectToolsRoutes(
             .some((project) => project.conversations.some((item) => item.id === missionId))
         ) {
           json(res, 404, { error: "mission not found" });
+          return true;
+        }
+        if (missionMatch[2] === "pr/preview" && method === "GET") {
+          json(res, 200, await github.preview(missionId));
+          return true;
+        }
+        if (missionMatch[2] === "pr" && method === "POST") {
+          const input = z
+            .object({
+              expectedHead: z.string().regex(/^[a-f0-9]{40,64}$/),
+              title: z.string().trim().min(1).max(120),
+              body: z.string().max(20_000),
+              draft: z.boolean(),
+            })
+            .parse(await body(req));
+          json(res, 200, await github.publish(missionId, input));
+          return true;
+        }
+        if (missionMatch[2] === "checks" && method === "GET") {
+          json(res, 200, await github.checks(missionId));
           return true;
         }
         if (missionMatch[2] === "checkpoints" && method === "GET") {
@@ -273,9 +297,18 @@ export function projectToolsRoutes(
       }
       json(res, 405, { error: "method not allowed" });
     } catch (error) {
-      json(res, error instanceof Error && /busy|running/.test(error.message) ? 409 : 400, {
-        error: error instanceof Error ? error.message : String(error),
-      });
+      json(
+        res,
+        error instanceof GitHubError
+          ? error.status
+          : error instanceof Error && /busy|running/.test(error.message)
+            ? 409
+            : 400,
+        {
+          ...(error instanceof GitHubError ? { code: error.code } : {}),
+          error: error instanceof Error ? error.message : String(error),
+        },
+      );
     }
     return true;
   };

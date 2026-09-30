@@ -1,4 +1,8 @@
 export type MissionEventType =
+  | "github:publishing"
+  | "github:pull-request"
+  | "github:checks"
+  | "github:failed"
   | "mission:started"
   | "mission:permission"
   | "mission:applied"

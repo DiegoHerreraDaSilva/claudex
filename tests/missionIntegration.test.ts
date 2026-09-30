@@ -36,6 +36,8 @@ import { ChatService } from "../src/app/chat.ts";
 import { GIT_IDENTITY, runGit } from "../src/app/git.ts";
 import { ProjectRegistry } from "../src/app/projects.ts";
 import { MemoryService } from "../src/application/memoryService.js";
+import { MissionGitHubService } from "../src/application/missionGitHubService.js";
+import { GitHubClient } from "../src/infrastructure/github.js";
 import { CheckpointService } from "../src/application/checkpointService.js";
 import { EventStore } from "../src/infrastructure/persistence/eventStore.ts";
 import type { OrchestratorConfig } from "../src/config.ts";
@@ -199,6 +201,28 @@ describe("phase 3 mission integration", () => {
       const missing = await fetch(`http://127.0.0.1:${port}/api/missions/unknown/summary`);
       expect(missing.status).toBe(404);
       const base = `http://127.0.0.1:${port}`;
+      const noPr = await fetch(`${base}/api/missions/${f.conversationId}/checks`);
+      expect(noPr.status).toBe(404);
+      expect((await noPr.json()).code).toBe("GITHUB_NO_PR");
+      const stalePr = await fetch(`${base}/api/missions/${f.conversationId}/pr`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          expectedHead: "b".repeat(40),
+          title: "Create result",
+          body: "reviewed",
+          draft: true,
+        }),
+      });
+      expect(stalePr.status).toBe(409);
+      expect((await stalePr.json()).code).toBe("MISSION_CHANGED");
+      const malformedPr = await fetch(`${base}/api/missions/${f.conversationId}/pr`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expectedHead: "invalid", title: "", body: "", draft: true }),
+      });
+      expect(malformedPr.status).toBe(400);
+
       const intelligence = await fetch(`${base}/api/projects/${f.project.id}/intelligence`);
       expect((await intelligence.json()).files).toContainEqual({ file: "README.md", symbols: [] });
       expect(
@@ -274,8 +298,86 @@ describe("phase 3 mission integration", () => {
         server.server.close((err) => (err ? reject(err) : resolve())),
       );
     }
+    await runGit(f.dir, ["remote", "add", "origin", "https://github.com/owner/repo.git"]);
+    const ghCalls: string[][] = [];
+    const pullRequest = {
+      number: 9,
+      url: "https://github.com/owner/repo/pull/9",
+      title: "Create result",
+      state: "OPEN",
+      isDraft: true,
+      isCrossRepository: false,
+      headRefName: summary!.branch!,
+      baseRefName: summary!.baseBranch!,
+      headRefOid: summary!.head!,
+    };
+    const fakeGitHub = new GitHubClient(async (command, args) => {
+      ghCalls.push([command, ...args]);
+      const stdout =
+        command === "git" && args[0] === "remote"
+          ? "https://github.com/owner/repo.git"
+          : args.includes("list")
+            ? "[]"
+            : args.includes("create")
+              ? pullRequest.url
+              : args.includes("view")
+                ? JSON.stringify(pullRequest)
+                : args.includes("checks")
+                  ? JSON.stringify([
+                      {
+                        name: "Tests",
+                        bucket: "pass",
+                        state: "SUCCESS",
+                        link: "https://github.com/owner/repo/actions/runs/1",
+                      },
+                    ])
+                  : "";
+      return { stdout, stderr: "", code: 0, durationMs: 1 };
+    });
+    const github = new MissionGitHubService(f.chat, f.registry, f.config.worktreesDir, fakeGitHub);
+    const preview = await github.preview(f.conversationId);
+    expect(preview).toMatchObject({
+      expectedHead: summary!.head,
+      authenticated: true,
+      draft: true,
+    });
+    expect(preview.body).toContain("Review: approved");
+    await expect(
+      github.publish(f.conversationId, { ...preview, expectedHead: "b".repeat(40) }),
+    ).rejects.toMatchObject({ code: "MISSION_CHANGED" });
+    await f.chat.setAutonomy(f.project.id, f.conversationId, "manual");
+    await expect(github.publish(f.conversationId, preview)).rejects.toMatchObject({
+      code: "PERMISSION_DENIED",
+    });
+    expect(ghCalls.some((call) => call.includes("push"))).toBe(false);
+    await f.chat.setAutonomy(f.project.id, f.conversationId, "assisted");
+    const publishing = github.publish(f.conversationId, preview);
+    for (let attempt = 0; attempt < 1000 && !f.chat.permissions.list().length; attempt++)
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(f.chat.permissions.list()).toHaveLength(1);
+    await expect(f.chat.setAutonomy(f.project.id, f.conversationId, "autonomous")).rejects.toThrow(
+      "busy",
+    );
+    f.chat.permissions.resolve(f.chat.permissions.list()[0]!.id, true);
+    expect(await publishing).toMatchObject({ number: 9 });
+    expect((await f.chat.missionSummary(f.conversationId))?.pullRequest).toMatchObject({
+      number: 9,
+    });
+    expect(
+      (await new EventStore(path.join(f.dataDir, "missions")).readSummary(f.conversationId))
+        ?.githubRepo,
+    ).toBe("owner/repo");
+    await f.chat.setAutonomy(f.project.id, f.conversationId, "autonomous");
+    expect(await github.checks(f.conversationId)).toMatchObject({
+      status: "passed",
+      headMatchesReview: true,
+    });
+    await runGit(f.dir, ["remote", "remove", "origin"]);
     const worktree = f.project.conversations[0]!.worktreePath!;
     await writeFile(path.join(worktree, "unreviewed.txt"), "pending");
+    await expect(github.preview(f.conversationId)).rejects.toMatchObject({
+      code: "MISSION_CHANGED",
+    });
     expect((await f.chat.apply(f.project.id, f.conversationId)).ok).toBe(false);
     await rm(path.join(worktree, "unreviewed.txt"));
     await runGit(worktree, [
@@ -307,12 +409,15 @@ describe("phase 3 mission integration", () => {
       f.chat.restore(f.conversationId, "00000000-0000-4000-8000-000000000000"),
     ).rejects.toThrow("checkpoint not found");
     await f.registry.flush();
-  }, 120_000);
+  }, 180_000);
 
   it("keeps rejected changes in the worktree and refuses apply", async () => {
     const f = await fixture();
     await f.chat.send(f.project.id, f.conversationId, "reject-review");
     expect((await f.chat.missionSummary(f.conversationId))?.status).toBe("failed");
+    await expect(
+      new MissionGitHubService(f.chat, f.registry, f.config.worktreesDir).preview(f.conversationId),
+    ).rejects.toMatchObject({ code: "MISSION_NOT_READY" });
     expect((await f.chat.apply(f.project.id, f.conversationId)).ok).toBe(false);
     expect(
       await readFile(path.join(f.project.conversations[0]!.worktreePath!, "result.txt"), "utf8"),

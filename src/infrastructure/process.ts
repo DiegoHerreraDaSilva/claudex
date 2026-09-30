@@ -13,6 +13,7 @@ export interface CommandResult {
 
 export interface CommandOptions {
   cwd: string;
+  env?: Record<string, string>;
   onOutput?: (text: string, stream: "stdout" | "stderr") => void;
   timeoutMs?: number;
   maxOutputBytes?: number;
@@ -53,6 +54,7 @@ export function runCommand(
       detached: process.platform !== "win32",
       env: {
         ...process.env,
+        ...options.env,
         ...(command === process.execPath && process.versions.electron
           ? { ELECTRON_RUN_AS_NODE: "1" }
           : {}),

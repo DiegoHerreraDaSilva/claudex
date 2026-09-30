@@ -31,7 +31,19 @@ describe("mission projection", () => {
     const restored = projectMissionEvent(summary, { ...event("mission:stopped"), at: 999 });
     expect(restored?.status).toBe("cancelled");
     expect(restored?.finishedAt).toBe(100);
+    summary = projectMissionEvent(
+      summary,
+      event("github:pull-request", { pullRequest: { number: 7 }, repo: "owner/repo" }),
+    );
+    summary = projectMissionEvent(
+      summary,
+      event("github:checks", { ci: { pullRequest: { number: 7 }, status: "pending" } }),
+    );
+    expect(summary?.ci?.status).toBe("pending");
     summary = projectMissionEvent(summary, event("mission:started"));
+    expect(summary?.pullRequest?.number).toBe(7);
+    expect(summary?.githubRepo).toBe("owner/repo");
+    expect(summary?.ci).toBeUndefined();
     expect(summary?.verification).toEqual([]);
     expect(summary?.finishedAt).toBeUndefined();
   });

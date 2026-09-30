@@ -685,9 +685,9 @@ export class MissionService {
     });
   }
 
-  private async record(
+  async record(
     missionId: string,
-    channel: MissionChannel,
+    channel: Pick<MissionChannel, "event" | "summary">,
     event: MissionEventInput,
   ): Promise<void> {
     try {

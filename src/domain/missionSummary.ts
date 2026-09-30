@@ -1,3 +1,4 @@
+import type { PullRequest, CiSnapshot } from "./devops.js";
 import type { AgentRun, TokenUsage } from "./agent.js";
 import type { TaskEvent } from "./event.js";
 import type { MissionStatus } from "./mission.js";
@@ -25,6 +26,9 @@ export interface MissionSummary {
   review?: Review;
   usage: TokenUsage;
   costUsd: number;
+  pullRequest?: PullRequest;
+  githubRepo?: string;
+  ci?: CiSnapshot;
   error?: string;
 }
 
@@ -50,6 +54,8 @@ export function projectMissionEvent(
       verification: [],
       usage: { inputTokens: 0, outputTokens: 0 },
       costUsd: 0,
+      pullRequest: previous?.pullRequest,
+      githubRepo: previous?.githubRepo,
     };
   }
   if (!previous) return undefined;
@@ -59,6 +65,15 @@ export function projectMissionEvent(
     revision: (previous.revision ?? 0) + 1,
   };
   switch (event.type) {
+    case "github:pull-request":
+      summary.pullRequest = payload.pullRequest as PullRequest;
+      summary.githubRepo = payload.repo as string;
+      summary.ci = undefined;
+      break;
+    case "github:checks":
+      summary.ci = payload.ci as CiSnapshot;
+      summary.pullRequest = summary.ci.pullRequest;
+      break;
     case "router:decided":
       summary.status = payload.route === "plan" ? "planning" : "implementing";
       break;
