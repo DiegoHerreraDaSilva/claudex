@@ -45,6 +45,7 @@
     "@openai/codex-sdk": "^0.159.1",
     "axios": "^1.7.9",
     "chalk": "^5.4.1",
+    "electron-updater": "^6.3.9",
     "uuid": "^11.0.5",
     "ws": "^8.18.0",
     "zod": "^4.0.0"
@@ -68,6 +69,7 @@
     "files": [
       "dist/**/*",
       "desktop/**/*",
+      "build/icon.png",
       "package.json",
       "node_modules/**/*"
     ],
@@ -80,6 +82,7 @@
     },
     "win": {
       "target": "nsis",
+      "icon": "build/icon.png",
       "signAndEditExecutable": false
     },
     "mac": {
@@ -89,6 +92,13 @@
     "linux": {
       "target": "AppImage",
       "category": "Development"
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "DiegoHerreraDaSilva",
+        "repo": "claudex"
+      }
+    ]
   }
 }

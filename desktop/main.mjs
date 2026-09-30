@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import updater from "electron-updater";
 import { getConfig } from "../dist/config.js";
 import { JevClient } from "../dist/jev.js";
 import { ProjectRegistry } from "../dist/app/projects.js";
@@ -33,6 +34,7 @@ async function start() {
     minHeight: 600,
     backgroundColor: "#000000",
     title: "Claudex",
+    icon: path.join(app.getAppPath(), "build", "icon.png"),
     webPreferences: {
       preload: path.join(here, "preload.cjs"),
       contextIsolation: true,
@@ -44,6 +46,18 @@ async function start() {
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
+
+  setupAutoUpdate();
+}
+
+function setupAutoUpdate() {
+  if (!app.isPackaged) return;
+  const { autoUpdater } = updater;
+  autoUpdater.autoDownload = true;
+  autoUpdater.on("error", (err) => console.error("auto-update error:", err?.message ?? err));
+  autoUpdater
+    .checkForUpdatesAndNotify()
+    .catch((err) => console.error("auto-update check failed:", err?.message ?? err));
 }
 
 ipcMain.handle("pick-folder", async () => {
