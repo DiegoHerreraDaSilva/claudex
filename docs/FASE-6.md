@@ -36,9 +36,8 @@ Corpos JSON limitados a 32 KB; título até 120 caracteres e descrição até 20
 
 A prévia é local: consulta os remotes Git e o estado de autenticação do CLI, sem publicar ou consultar PRs no GitHub. A falta de login desabilita a publicação e explica como preparar novamente após autenticar.
 
-## Validação e pendências
+## Validação
 
-- Build/typecheck, lint sem avisos e sintaxe dos módulos frontend passaram.
 - Suíte completa após Browser QA: 79 testes em 21 arquivos, com `npm test -- --maxWorkers=2 --minWorkers=1 --testTimeout=15000`; dois testes adicionais de contratos HTTP passaram em execução direcionada. Total atual: 81 testes em 22 arquivos.
 - Build/typecheck, lint sem avisos, sintaxe frontend, smoke da interface e dez cenários reais de Chrome/Edge passaram; nenhuma requisição chegou à origem bloqueada.
 
@@ -46,7 +45,9 @@ Testes do adaptador simulam GitHub na fronteira de processos. Cobrem URLs de rem
 
 O smoke `scripts/phase6-ui-check.mjs` carrega os assets reais em Electron oculto com API GitHub simulada: prévia, edição de título/descrição, publicação, CI, mismatch de commit, login ausente, escaping, modo manual, PT/EN, claro/escuro e larguras 320/768/1440. Capturas em `.claudex/qa/phase6/`. Nenhum PR externo foi criado nesses testes.
 
-O login no GitHub foi concluído e o acesso autenticado ao repositório `DiegoHerreraDaSilva/claudex` foi confirmado. A validação de publicação e CI remoto será registrada após executar o adaptador com o commit final.
+A validação autenticada foi concluída após autorização explícita do usuário para publicar no repositório público. O adaptador real publicou o commit `3aa7f1d`, abriu a [PR #1 em rascunho](https://github.com/DiegoHerreraDaSilva/claudex/pull/1), confirmou que o HEAD corresponde ao enviado e reaproveitou a mesma PR em uma segunda chamada. Depois retornou CI `passed` e `headMatchesReview: true`. O [CI do commit de implementação](https://github.com/DiegoHerreraDaSilva/claudex/actions/runs/36745165224) passou no GitHub, incluindo 81 testes em 22 arquivos. Essa validação externa usou o adaptador; as regras da missão/API foram verificadas separadamente com fixtures Git/EventStore.
+
+A PR reúne as fases 3–6 desde a base `4e83c40` em `main`. O remote `origin` foi configurado para `https://github.com/DiegoHerreraDaSilva/claudex.git`. Não houve merge, release ou alteração de versão. A alteração anterior dos dois campos de versão em `package-lock.json` permanece somente no working tree e não foi publicada. A fase 6 está concluída no escopo descrito neste documento.
 
 ## Browser QA
 

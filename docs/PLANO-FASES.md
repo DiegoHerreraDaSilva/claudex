@@ -3,7 +3,7 @@
 > Documento de handoff. Descreve o estado atual do projeto e o plano detalhado
 > para continuar o desenvolvimento em outras sessões.
 > Última atualização: 30/09/2026, após GitHub/CI e Browser QA da Fase 6.
-> Fases 3–5 concluídas localmente. Fase 6: GitHub/CI e Browser QA implementados e validados localmente; publicação autenticada em validação. Ver [entrega da Fase 6](FASE-6.md).
+> Fases 3–6 concluídas no escopo descrito nas entregas. Browser QA validado em Chrome/Edge e GitHub/CI validados na [PR #1 em rascunho](https://github.com/DiegoHerreraDaSilva/claudex/pull/1), com CI aprovado. Ver [entrega da Fase 6](FASE-6.md).
 
 ---
 
@@ -400,7 +400,7 @@ terminal, git workspace, checkpoints e histórico de missões.
 
 ### 6.1 GitHub (`src/infrastructure/github.ts`)
 
-Implementado localmente; ver [FASE-6.md](FASE-6.md). O `gh` está instalado e autenticado; o acesso ao repositório foi confirmado.
+Implementado e validado com GitHub real na PR #1; ver [FASE-6.md](FASE-6.md). O `gh` está instalado e autenticado; publicação, reuso de PR, hash e CI aprovado foram confirmados.
 - Usar `gh`; autenticar com `gh auth login` antes da validação com GitHub real.
 - `POST /api/missions/:id/pr` → abre PR da branch da missão (`gh pr create`).
 - `GET /api/missions/:id/checks` → `gh pr checks` (status de CI).
