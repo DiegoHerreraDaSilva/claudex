@@ -82,6 +82,16 @@ export function createAppServer(options: AppServerOptions): AppServer {
         return json(res, 200, await listDirectory(url.searchParams.get("path") ?? ""));
       }
 
+      const conversationMatch = /^\/api\/projects\/([^/]+)\/conversations\/([^/]+)$/.exec(url.pathname);
+      if (conversationMatch?.[1] && conversationMatch[2]) {
+        const projectId = decodeURIComponent(conversationMatch[1]);
+        const conversationId = decodeURIComponent(conversationMatch[2]);
+        if (method === "DELETE") {
+          await chat.removeConversation(projectId, conversationId);
+          return json(res, 200, { ok: true });
+        }
+      }
+
       const projectMatch = /^\/api\/projects\/([^/]+)$/.exec(url.pathname);
       if (projectMatch?.[1]) {
         const projectId = decodeURIComponent(projectMatch[1]);
@@ -125,20 +135,32 @@ export function createAppServer(options: AppServerOptions): AppServer {
       JSON.stringify(envelope({ type: "credentials", data: settingsHooks.getCredentialStatus() })),
     );
     socket.on("message", (raw: Buffer | string) => {
-      let parsed: SettingsIncoming & { projectId?: string; text?: string };
+      let parsed: SettingsIncoming & {
+        projectId?: string;
+        conversationId?: string;
+        text?: string;
+        name?: string;
+      };
       try {
-        parsed = JSON.parse(raw.toString()) as SettingsIncoming & { projectId?: string; text?: string };
+        parsed = JSON.parse(raw.toString()) as typeof parsed;
       } catch {
         return;
       }
       if (handleSettingsMessage(parsed, socket, broadcast, settingsHooks)) return;
-      if (parsed.type === "chat:send" && parsed.projectId && typeof parsed.text === "string") {
-        void chat.send(parsed.projectId, parsed.text).catch((err: unknown) => {
+
+      if (
+        parsed.type === "chat:send" &&
+        parsed.projectId &&
+        parsed.conversationId &&
+        typeof parsed.text === "string"
+      ) {
+        void chat.send(parsed.projectId, parsed.conversationId, parsed.text).catch((err: unknown) => {
           socket.send(
             JSON.stringify(
               envelope({
                 type: "chat:error",
                 projectId: parsed.projectId,
+                conversationId: parsed.conversationId,
                 error: err instanceof Error ? err.message : String(err),
               }),
             ),
@@ -146,14 +168,35 @@ export function createAppServer(options: AppServerOptions): AppServer {
         });
         return;
       }
-      if (parsed.type === "chat:action" && parsed.projectId && parsed.action) {
+      if (parsed.type === "chat:stop" && parsed.projectId && parsed.conversationId) {
+        chat.stop(parsed.projectId, parsed.conversationId);
+        return;
+      }
+      if (parsed.type === "chat:action" && parsed.projectId && parsed.conversationId && parsed.action) {
+        const projectId = parsed.projectId;
+        const conversationId = parsed.conversationId;
         const run =
           parsed.action === "apply"
-            ? chat.apply(parsed.projectId)
+            ? chat.apply(projectId, conversationId)
             : parsed.action === "discard"
-              ? chat.discard(parsed.projectId)
+              ? chat.discard(projectId, conversationId)
               : Promise.resolve({ ok: false, reason: "unknown action" });
         void run.catch(() => undefined);
+        return;
+      }
+      if (parsed.type === "conversation:create" && parsed.projectId) {
+        const projectId = parsed.projectId;
+        void registry.createConversation(projectId, parsed.name).then(() => chat.emitProjects());
+        return;
+      }
+      if (parsed.type === "conversation:rename" && parsed.projectId && parsed.conversationId && parsed.name) {
+        void registry
+          .renameConversation(parsed.projectId, parsed.conversationId, parsed.name)
+          .then(() => chat.emitProjects());
+        return;
+      }
+      if (parsed.type === "conversation:delete" && parsed.projectId && parsed.conversationId) {
+        void chat.removeConversation(parsed.projectId, parsed.conversationId).catch(() => undefined);
         return;
       }
       if (parsed.type === "project:delete" && parsed.projectId) {
@@ -180,7 +223,9 @@ export function createAppServer(options: AppServerOptions): AppServer {
 function chatRunning(chat: ChatService): Set<string> {
   const running = new Set<string>();
   for (const project of chat.registryRef.list()) {
-    if (chat.isRunning(project.id)) running.add(project.id);
+    for (const conversation of project.conversations) {
+      if (chat.isRunning(conversation.id)) running.add(conversation.id);
+    }
   }
   return running;
 }

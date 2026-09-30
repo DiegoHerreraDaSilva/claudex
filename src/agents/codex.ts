@@ -21,6 +21,7 @@ export interface RunCodexAgentOptions {
   onEvent?: CodexEventHandler;
   resumeThreadId?: string;
   timeoutMs?: number;
+  signal?: AbortSignal;
   sandboxMode?: SandboxMode;
   approvalPolicy?: ApprovalMode;
   reasoningEffort?: ThreadOptions["modelReasoningEffort"];
@@ -47,6 +48,10 @@ export async function runCodexAgent(options: RunCodexAgentOptions): Promise<Code
     : codex.startThread(threadOptions);
 
   const controller = new AbortController();
+  if (options.signal) {
+    if (options.signal.aborted) controller.abort();
+    else options.signal.addEventListener("abort", () => controller.abort(), { once: true });
+  }
   const timer =
     options.timeoutMs && options.timeoutMs > 0
       ? setTimeout(() => controller.abort(), options.timeoutMs)

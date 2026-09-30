@@ -1,6 +1,7 @@
 const I18N = {
   pt: {
     newProject: "+ novo projeto",
+    newConversation: "+ nova conversa",
     noProject: "nenhum projeto",
     stop: "parar",
     apply: "aplicar",
@@ -53,9 +54,17 @@ const I18N = {
     roleRouting: "roteamento",
     roleError: "erro",
     roleSystem: "sistema",
+    deleteProject: "excluir projeto",
+    deleteConversation: "excluir conversa",
+    renameConversation: "renomear",
+    confirmDeleteProject: "Excluir este projeto do Claudex? A pasta no disco NÃO será apagada.",
+    confirmDeleteConversation: "Excluir esta conversa e sua branch/worktree?",
+    conversations: "conversas",
+    currentConversation: "conversa",
   },
   en: {
     newProject: "+ new project",
+    newConversation: "+ new conversation",
     noProject: "no project",
     stop: "stop",
     apply: "apply",
@@ -108,6 +117,13 @@ const I18N = {
     roleRouting: "routing",
     roleError: "error",
     roleSystem: "system",
+    deleteProject: "delete project",
+    deleteConversation: "delete conversation",
+    renameConversation: "rename",
+    confirmDeleteProject: "Delete this project from Claudex? The folder on disk will NOT be deleted.",
+    confirmDeleteConversation: "Delete this conversation and its branch/worktree?",
+    conversations: "conversations",
+    currentConversation: "conversation",
   },
 };
 
@@ -116,69 +132,26 @@ const LANG_KEY = "claudex-lang";
 
 const state = {
   projects: [],
-  currentId: null,
+  currentProjectId: null,
+  currentConversationId: null,
   snapshot: null,
-  diff: "",
-  diffFiles: [],
-  running: false,
-  routing: null,
+  running: new Set(),
   credentials: null,
   autoscroll: true,
   browserPath: "",
   browserParent: null,
 };
 
-const els = {
-  projectList: document.getElementById("project-list"),
-  newProjectBtn: document.getElementById("new-project-btn"),
-  credSummary: document.getElementById("cred-summary"),
-  projName: document.getElementById("proj-name"),
-  projMeta: document.getElementById("proj-meta"),
-  stopBtn: document.getElementById("stop-btn"),
-  applyBtn: document.getElementById("apply-btn"),
-  discardBtn: document.getElementById("discard-btn"),
-  langToggle: document.getElementById("lang-toggle"),
-  themeToggle: document.getElementById("theme-toggle"),
-  settingsBtn: document.getElementById("settings-btn"),
-  settingsDot: document.getElementById("settings-dot"),
-  transcript: document.getElementById("transcript"),
-  composer: document.getElementById("composer"),
-  input: document.getElementById("composer-input"),
-  sendBtn: document.getElementById("send-btn"),
-  diffFiles: document.getElementById("diff-files"),
-  diffView: document.getElementById("diff-view"),
-  tabSession: document.getElementById("tab-session"),
-  modal: document.getElementById("modal"),
-  modalClose: document.getElementById("modal-close"),
-  npName: document.getElementById("np-name"),
-  npPath: document.getElementById("np-path"),
-  npBrowse: document.getElementById("np-browse"),
-  npCreate: document.getElementById("np-create"),
-  npStatus: document.getElementById("np-status"),
-  browserModal: document.getElementById("browser-modal"),
-  browserClose: document.getElementById("browser-close"),
-  browserPath: document.getElementById("browser-path"),
-  browserList: document.getElementById("browser-list"),
-  browserUp: document.getElementById("browser-up"),
-  browserSelect: document.getElementById("browser-select"),
-  settingsModal: document.getElementById("settings-modal"),
-  settingsClose: document.getElementById("settings-close"),
-  settingsSave: document.getElementById("settings-save"),
-  settingsMsg: document.getElementById("settings-msg"),
-  credStatus: document.getElementById("cred-status"),
-  tsHint: document.getElementById("ts-hint"),
-  claudeMode: document.getElementById("claude-mode"),
-  claudeAccount: document.getElementById("claude-account"),
-  codexMode: document.getElementById("codex-mode"),
-  codexAccount: document.getElementById("codex-account"),
-  inputTypesafe: document.getElementById("input-typesafe"),
-  inputAnthropic: document.getElementById("input-anthropic"),
-  inputOpenai: document.getElementById("input-openai"),
-  inputComplexModel: document.getElementById("input-complex-model"),
-  clearAnthropic: document.getElementById("clear-anthropic"),
-  clearOpenai: document.getElementById("clear-openai"),
-  accountLog: document.getElementById("account-log"),
-};
+const els = new Proxy(
+  {},
+  {
+    get(_target, prop) {
+      const map = els._map ?? (els._map = {});
+      if (!map[prop]) map[prop] = document.getElementById(String(prop));
+      return map[prop];
+    },
+  },
+);
 
 let socket = null;
 let lang = "pt";
@@ -186,9 +159,7 @@ let lang = "pt";
 function t(key, params) {
   const dict = I18N[lang] ?? I18N.en;
   let value = dict[key] ?? I18N.en[key] ?? key;
-  if (params) {
-    for (const [k, v] of Object.entries(params)) value = value.split(`{${k}}`).join(String(v));
-  }
+  if (params) for (const [k, v] of Object.entries(params)) value = value.split(`{${k}}`).join(String(v));
   return value;
 }
 
@@ -222,7 +193,16 @@ function initTheme() {
 }
 
 function currentProject() {
-  return state.projects.find((p) => p.id === state.currentId) || null;
+  return state.projects.find((p) => p.id === state.currentProjectId) || null;
+}
+
+function currentConversation() {
+  return currentProject()?.conversations?.find((c) => c.id === state.currentConversationId) || null;
+}
+
+function conversationMessages() {
+  const conv = state.snapshot?.project?.conversations?.find((c) => c.id === state.currentConversationId);
+  return conv?.messages ?? [];
 }
 
 function renderSidebar() {
@@ -236,8 +216,7 @@ function renderSidebar() {
   }
   for (const project of state.projects) {
     const item = document.createElement("div");
-    item.className = "project" + (project.id === state.currentId ? " selected" : "");
-    item.onclick = () => selectProject(project.id);
+    item.className = "project" + (project.id === state.currentProjectId ? " selected" : "");
 
     const head = document.createElement("div");
     head.className = "project-head";
@@ -246,37 +225,93 @@ function renderSidebar() {
     const name = document.createElement("span");
     name.className = "project-name";
     name.textContent = project.name;
-    head.append(dot, name);
+    const del = document.createElement("button");
+    del.className = "icon-btn";
+    del.title = t("deleteProject");
+    del.textContent = "×";
+    del.onclick = (e) => {
+      e.stopPropagation();
+      deleteProject(project.id);
+    };
+    head.append(dot, name, del);
 
     const pathEl = document.createElement("div");
     pathEl.className = "project-path";
     pathEl.textContent = project.rootPath;
-
     item.append(head, pathEl);
+
+    const header = item.querySelector(".project-head");
+    header.onclick = () => selectProject(project.id);
+
+    if (project.id === state.currentProjectId) {
+      const list = document.createElement("div");
+      list.className = "conversation-list";
+      for (const conversation of project.conversations ?? []) {
+        const row = document.createElement("div");
+        row.className = "conversation" + (conversation.id === state.currentConversationId ? " selected" : "");
+        const cdot = document.createElement("span");
+        cdot.className = "dot " + (conversation.running ? "running" : "");
+        const cname = document.createElement("span");
+        cname.className = "conversation-name";
+        cname.textContent = conversation.name;
+        const ren = document.createElement("button");
+        ren.className = "icon-btn";
+        ren.title = t("renameConversation");
+        ren.textContent = "✎";
+        ren.onclick = (e) => {
+          e.stopPropagation();
+          renameConversation(project.id, conversation.id, conversation.name);
+        };
+        const cdel = document.createElement("button");
+        cdel.className = "icon-btn";
+        cdel.title = t("deleteConversation");
+        cdel.textContent = "×";
+        cdel.onclick = (e) => {
+          e.stopPropagation();
+          deleteConversation(project.id, conversation.id);
+        };
+        row.append(cdot, cname, ren, cdel);
+        row.onclick = () => selectConversation(conversation.id);
+        list.appendChild(row);
+      }
+      const add = document.createElement("button");
+      add.className = "new-conv";
+      add.textContent = t("newConversation");
+      add.onclick = (e) => {
+        e.stopPropagation();
+        socket?.send(JSON.stringify({ type: "conversation:create", projectId: project.id }));
+      };
+      list.appendChild(add);
+      item.appendChild(list);
+    }
+
     els.projectList.appendChild(item);
   }
 }
 
 function renderHeader() {
   const project = currentProject();
-  if (!project) {
+  const conversation = currentConversation();
+  if (!project || !conversation) {
     els.projName.textContent = t("noProject");
     els.projMeta.textContent = "";
+    els.stopBtn.disabled = true;
     els.applyBtn.disabled = true;
     els.discardBtn.disabled = true;
-    els.stopBtn.disabled = true;
     return;
   }
-  els.projName.textContent = project.name;
+  els.projName.textContent = `${project.name}  ·  ${conversation.name}`;
   const bits = [project.rootPath];
-  if (state.snapshot?.baseBranch) bits.push(`base: ${state.snapshot.baseBranch}`);
-  if (state.snapshot?.branch) bits.push(`branch: ${state.snapshot.branch}`);
-  if (state.routing) {
-    bits.push(state.routing.label ? `${state.routing.label} → ${state.routing.agent}` : state.routing.agent);
-  }
+  if (project.baseBranch) bits.push(`base: ${project.baseBranch}`);
+  if (conversation.branch) bits.push(`branch: ${conversation.branch}`);
+  if (conversation.activeAgent) bits.push(conversation.activeAgent);
   els.projMeta.textContent = bits.join("  •  ");
-  els.stopBtn.disabled = !state.running;
-  const canAct = state.diffFiles.length > 0 && !state.running;
+
+  const running = state.running.has(conversation.id);
+  const diff = state.snapshot?.diffs?.[conversation.id];
+  const files = diff?.files ?? [];
+  els.stopBtn.disabled = !running;
+  const canAct = files.length > 0 && !running;
   els.applyBtn.disabled = !canAct;
   els.discardBtn.disabled = !canAct;
 }
@@ -294,38 +329,38 @@ function roleLabel(role) {
   return t(map[role] ?? "roleSystem");
 }
 
-function messageEl(message) {
-  const el = document.createElement("div");
-  el.className = `msg ${message.role}`;
-  const who = document.createElement("div");
-  who.className = "who";
-  who.textContent = roleLabel(message.role);
-  const bubble = document.createElement("div");
-  bubble.className = "bubble";
-  bubble.textContent = message.meta ? `${message.text}\n${message.meta}` : message.text;
-  el.append(who, bubble);
-  return el;
-}
-
 function renderTranscript() {
   els.transcript.replaceChildren();
   const project = currentProject();
-  if (!project) {
+  const conversation = currentConversation();
+  if (!project || !conversation) {
     const empty = document.createElement("div");
     empty.className = "empty";
     empty.textContent = t("emptySelect");
     els.transcript.appendChild(empty);
     return;
   }
-  const messages = state.snapshot?.project?.messages ?? [];
+  const messages = conversationMessages();
   if (messages.length === 0) {
     const empty = document.createElement("div");
     empty.className = "empty";
     empty.textContent = t("emptyDescribe");
     els.transcript.appendChild(empty);
   }
-  for (const message of messages) els.transcript.appendChild(messageEl(message));
-  if (state.running) {
+  for (const message of messages) {
+    const el = document.createElement("div");
+    el.className = `msg ${message.role}`;
+    const who = document.createElement("div");
+    who.className = "who";
+    who.textContent = roleLabel(message.role);
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
+    const text = message.code ? t(message.code) : message.text;
+    bubble.textContent = message.meta ? `${text}\n${message.meta}` : text;
+    el.append(who, bubble);
+    els.transcript.appendChild(el);
+  }
+  if (state.running.has(conversation.id)) {
     const typing = document.createElement("div");
     typing.className = "msg assistant typing";
     const bubble = document.createElement("div");
@@ -338,20 +373,21 @@ function renderTranscript() {
 }
 
 function renderDiff() {
+  const diff = state.snapshot?.diffs?.[state.currentConversationId];
   els.diffFiles.replaceChildren();
-  for (const file of state.diffFiles) {
+  for (const file of diff?.files ?? []) {
     const chip = document.createElement("span");
     chip.className = "file-chip";
     chip.textContent = file;
     els.diffFiles.appendChild(chip);
   }
-  if (!state.diff) {
+  if (!diff?.diff) {
     els.diffView.innerHTML = `<span class="empty">${t("noDiff")}</span>`;
     return;
   }
   els.diffView.replaceChildren();
   const frag = document.createDocumentFragment();
-  for (const line of state.diff.split("\n")) {
+  for (const line of diff.diff.split("\n")) {
     const span = document.createElement("span");
     if (line.startsWith("+") && !line.startsWith("+++")) span.className = "add";
     else if (line.startsWith("-") && !line.startsWith("---")) span.className = "del";
@@ -363,20 +399,22 @@ function renderDiff() {
 
 function renderSession() {
   const project = currentProject();
-  if (!project) {
+  const conversation = currentConversation();
+  if (!project || !conversation) {
     els.tabSession.innerHTML = `<span class="empty">${t("noSession")}</span>`;
     return;
   }
-  const p = state.snapshot?.project ?? {};
+  const full = state.snapshot?.project?.conversations?.find((c) => c.id === conversation.id);
   const rows = [
     ["projeto", project.name],
     ["pasta", project.rootPath],
-    ["branch", p.branch || "—"],
-    ["base", p.baseBranch || "—"],
-    ["agente", p.activeAgent || "—"],
-    ["claude session", p.claudeSessionId || "—"],
-    ["codex thread", p.codexThreadId || "—"],
-    ["mensagens", String((p.messages ?? []).length)],
+    [t("currentConversation"), conversation.name],
+    ["branch", full?.branch || "—"],
+    ["base", project.baseBranch || "—"],
+    ["agente", full?.activeAgent || "—"],
+    ["claude session", full?.claudeSessionId || "—"],
+    ["codex thread", full?.codexThreadId || "—"],
+    ["mensagens", String((full?.messages ?? []).length)],
   ];
   els.tabSession.replaceChildren();
   for (const [k, v] of rows) {
@@ -401,38 +439,45 @@ function render() {
   renderSession();
 }
 
+async function loadProjects() {
+  try {
+    const res = await fetch("/api/projects");
+    state.projects = await res.json();
+  } catch {
+    state.projects = [];
+  }
+  if (!state.currentProjectId && state.projects.length > 0) {
+    await selectProject(state.projects[0].id);
+  } else {
+    renderSidebar();
+  }
+}
+
 async function selectProject(projectId) {
-  state.currentId = projectId;
+  state.currentProjectId = projectId;
   state.snapshot = null;
-  state.diff = "";
-  state.diffFiles = [];
-  state.routing = null;
+  const project = state.projects.find((p) => p.id === projectId);
+  state.currentConversationId = project?.activeConversationId ?? project?.conversations?.[0]?.id ?? null;
   render();
   try {
     const res = await fetch(`/api/projects/${projectId}`);
     if (!res.ok) return;
     const snap = await res.json();
-    if (state.currentId !== projectId) return;
+    if (state.currentProjectId !== projectId) return;
     state.snapshot = snap;
-    state.diff = snap.diff || "";
-    state.diffFiles = snap.files || [];
-    state.running = !!snap.running;
-    if (snap.project?.activeAgent) state.routing = { agent: snap.project.activeAgent, label: "" };
+    state.running = new Set(snap.running ?? []);
+    if (!state.currentConversationId) {
+      state.currentConversationId = snap.project?.activeConversationId ?? snap.project?.conversations?.[0]?.id ?? null;
+    }
     render();
   } catch {
     /* ignore */
   }
 }
 
-function loadProjects() {
-  fetch("/api/projects")
-    .then((r) => r.json())
-    .then((data) => {
-      state.projects = data;
-      renderSidebar();
-      if (!state.currentId && data.length > 0) selectProject(data[0].id);
-    })
-    .catch(() => undefined);
+function selectConversation(conversationId) {
+  state.currentConversationId = conversationId;
+  render();
 }
 
 function loadCredentials() {
@@ -454,9 +499,7 @@ function renderCredentials() {
     els.claudeMode.textContent = cred.claude.mode;
     els.claudeMode.className = `mode-chip ${cred.claude.mode}`;
   }
-  if (els.claudeAccount) {
-    els.claudeAccount.textContent = cred.claude.mode === "subscription" ? cred.claude.detail : "";
-  }
+  if (els.claudeAccount) els.claudeAccount.textContent = cred.claude.mode === "subscription" ? cred.claude.detail : "";
   if (els.codexMode) {
     els.codexMode.textContent = cred.codex.mode;
     els.codexMode.className = `mode-chip ${cred.codex.mode}`;
@@ -478,8 +521,16 @@ function renderCredentials() {
 
 function sendMessage() {
   const text = els.input.value.trim();
-  if (!text || !state.currentId || state.running) return;
-  socket?.send(JSON.stringify({ type: "chat:send", projectId: state.currentId, text }));
+  if (!text || !state.currentConversationId) return;
+  if (state.running.has(state.currentConversationId)) return;
+  socket?.send(
+    JSON.stringify({
+      type: "chat:send",
+      projectId: state.currentProjectId,
+      conversationId: state.currentConversationId,
+      text,
+    }),
+  );
   els.input.value = "";
   autoGrow();
 }
@@ -487,6 +538,20 @@ function sendMessage() {
 function autoGrow() {
   els.input.style.height = "auto";
   els.input.style.height = `${Math.min(els.input.scrollHeight, 180)}px`;
+}
+
+function deleteProject(projectId) {
+  if (!window.confirm(t("confirmDeleteProject"))) return;
+  socket?.send(JSON.stringify({ type: "project:delete", projectId }));
+}
+function deleteConversation(projectId, conversationId) {
+  if (!window.confirm(t("confirmDeleteConversation"))) return;
+  socket?.send(JSON.stringify({ type: "conversation:delete", projectId, conversationId }));
+}
+function renameConversation(projectId, conversationId, current) {
+  const name = window.prompt(t("renameConversation"), current);
+  if (!name) return;
+  socket?.send(JSON.stringify({ type: "conversation:rename", projectId, conversationId, name }));
 }
 
 function openModal() {
@@ -515,12 +580,9 @@ async function browseFolder() {
 
 function applyPickedFolder(folder) {
   els.npPath.value = folder;
-  if (!els.npName.value) {
-    els.npName.value = folder.replace(/[\\/]+$/, "").split(/[\\/]/).pop();
-  }
+  if (!els.npName.value) els.npName.value = folder.replace(/[\\/]+$/, "").split(/[\\/]/).pop();
   validatePath();
 }
-
 function openBrowser(startPath) {
   els.browserModal.classList.remove("hidden");
   loadBrowser(startPath || "");
@@ -692,13 +754,11 @@ function pushAccountLog(cls, text) {
   els.accountLog.appendChild(line);
   els.accountLog.scrollTop = els.accountLog.scrollHeight;
 }
-
 function setAccountButtonsBusy(provider, busy) {
   document.querySelectorAll(`.small-btn[data-provider="${provider}"]`).forEach((btn) => {
     btn.disabled = busy;
   });
 }
-
 function runAccountAction(provider, action) {
   if (!socket || socket.readyState !== WebSocket.OPEN) {
     pushAccountLog("err", t("noConnection"));
@@ -711,11 +771,16 @@ function runAccountAction(provider, action) {
 
 function handleMessage(msg) {
   switch (msg.type) {
-    case "projects":
+    case "projects": {
       state.projects = msg.data;
+      const project = currentProject();
+      if (project && !project.conversations.some((c) => c.id === state.currentConversationId)) {
+        state.currentConversationId = project.activeConversationId ?? project.conversations[0]?.id ?? null;
+      }
       renderSidebar();
-      if (!state.currentId && state.projects.length > 0) selectProject(state.projects[0].id);
+      renderHeader();
       break;
+    }
     case "credentials":
       state.credentials = msg.data;
       renderCredentials();
@@ -734,37 +799,53 @@ function handleMessage(msg) {
       pushAccountLog(msg.data?.ok ? "ok" : "err", `${msg.data?.provider} ${msg.data?.action}: ${msg.data?.ok ? "ok" : msg.data?.message}`);
       break;
     case "chat:message": {
-      if (msg.projectId !== state.currentId || !state.snapshot) break;
-      state.snapshot.project.messages.push(msg.message);
-      renderTranscript();
+      if (msg.projectId !== state.currentProjectId || !state.snapshot) break;
+      const conv = state.snapshot.project.conversations.find((c) => c.id === msg.conversationId);
+      if (conv) conv.messages.push(msg.message);
+      if (msg.conversationId === state.currentConversationId) renderTranscript();
       break;
     }
     case "chat:routing": {
-      if (msg.projectId !== state.currentId) break;
-      state.routing = { agent: msg.agent, label: msg.label };
-      renderHeader();
+      if (msg.projectId !== state.currentProjectId) break;
+      const conv = state.snapshot?.project?.conversations?.find((c) => c.id === msg.conversationId);
+      if (conv) conv.activeAgent = msg.agent;
+      if (msg.conversationId === state.currentConversationId) renderHeader();
       break;
     }
     case "chat:turn": {
-      if (msg.projectId !== state.currentId) break;
-      state.running = msg.status === "started";
-      els.sendBtn.disabled = state.running;
-      render();
+      if (msg.conversationId === state.currentConversationId) {
+        if (msg.status === "started") state.running.add(msg.conversationId);
+        else state.running.delete(msg.conversationId);
+        renderHeader();
+        renderTranscript();
+      } else if (msg.status === "started") {
+        state.running.add(msg.conversationId);
+      } else {
+        state.running.delete(msg.conversationId);
+      }
+      renderSidebar();
       break;
     }
     case "chat:diff": {
-      if (msg.projectId === state.currentId) {
-        state.diff = msg.diff;
-        state.diffFiles = msg.files;
+      if (!state.snapshot) break;
+      state.snapshot.diffs = state.snapshot.diffs || {};
+      state.snapshot.diffs[msg.conversationId] = {
+        diff: msg.diff,
+        files: msg.files,
+        branch: msg.branch,
+        baseBranch: msg.baseBranch,
+      };
+      if (msg.conversationId === state.currentConversationId) {
         renderDiff();
         renderHeader();
       }
       break;
     }
     case "chat:error": {
-      if (msg.projectId !== state.currentId || !state.snapshot) break;
-      state.snapshot.project.messages.push({ id: String(Date.now()), at: Date.now(), role: "error", text: msg.error });
-      renderTranscript();
+      if (msg.projectId !== state.currentProjectId || !state.snapshot) break;
+      const conv = state.snapshot.project.conversations.find((c) => c.id === msg.conversationId);
+      if (conv) conv.messages.push({ id: String(Date.now()), at: Date.now(), role: "error", text: msg.error });
+      if (msg.conversationId === state.currentConversationId) renderTranscript();
       break;
     }
     default:
@@ -793,7 +874,6 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
-// listeners
 els.newProjectBtn.addEventListener("click", openModal);
 els.modalClose.addEventListener("click", closeModal);
 els.npBrowse.addEventListener("click", browseFolder);
@@ -802,7 +882,6 @@ els.npCreate.addEventListener("click", createProject);
 els.modal.addEventListener("click", (event) => {
   if (event.target === els.modal) closeModal();
 });
-
 els.browserClose.addEventListener("click", closeBrowser);
 els.browserUp.addEventListener("click", () => loadBrowser(state.browserParent || ""));
 els.browserSelect.addEventListener("click", () => {
@@ -812,7 +891,6 @@ els.browserSelect.addEventListener("click", () => {
 els.browserModal.addEventListener("click", (event) => {
   if (event.target === els.browserModal) closeBrowser();
 });
-
 els.settingsBtn.addEventListener("click", openSettings);
 els.settingsClose.addEventListener("click", closeSettings);
 els.settingsSave.addEventListener("click", saveSettings);
@@ -822,7 +900,6 @@ els.settingsModal.addEventListener("click", (event) => {
 document.querySelectorAll(".small-btn[data-provider]").forEach((btn) => {
   btn.addEventListener("click", () => runAccountAction(btn.dataset.provider, btn.dataset.action));
 });
-
 els.composer.addEventListener("submit", (event) => {
   event.preventDefault();
   sendMessage();
@@ -834,17 +911,21 @@ els.input.addEventListener("keydown", (event) => {
   }
 });
 els.input.addEventListener("input", autoGrow);
-
 els.applyBtn.addEventListener("click", () => {
-  if (state.currentId) socket?.send(JSON.stringify({ type: "chat:action", projectId: state.currentId, action: "apply" }));
+  if (state.currentConversationId) {
+    socket?.send(JSON.stringify({ type: "chat:action", projectId: state.currentProjectId, conversationId: state.currentConversationId, action: "apply" }));
+  }
 });
 els.discardBtn.addEventListener("click", () => {
-  if (state.currentId) socket?.send(JSON.stringify({ type: "chat:action", projectId: state.currentId, action: "discard" }));
+  if (state.currentConversationId) {
+    socket?.send(JSON.stringify({ type: "chat:action", projectId: state.currentProjectId, conversationId: state.currentConversationId, action: "discard" }));
+  }
 });
 els.stopBtn.addEventListener("click", () => {
-  if (state.currentId) socket?.send(JSON.stringify({ type: "chat:stop", projectId: state.currentId }));
+  if (state.currentConversationId) {
+    socket?.send(JSON.stringify({ type: "chat:stop", projectId: state.currentProjectId, conversationId: state.currentConversationId }));
+  }
 });
-
 els.langToggle.addEventListener("click", () => setLang(lang === "pt" ? "en" : "pt"));
 els.themeToggle.addEventListener("click", () => {
   const current = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
@@ -852,7 +933,6 @@ els.themeToggle.addEventListener("click", () => {
   localStorage.setItem(THEME_KEY, next);
   applyTheme(next);
 });
-
 document.querySelectorAll(".tab").forEach((tab) => {
   tab.addEventListener("click", () => {
     const name = tab.dataset.tab;
@@ -860,12 +940,10 @@ document.querySelectorAll(".tab").forEach((tab) => {
     document.querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("active", p.id === `tab-${name}`));
   });
 });
-
 els.transcript.addEventListener("scroll", () => {
   state.autoscroll = Math.abs(els.transcript.scrollHeight - els.transcript.scrollTop - els.transcript.clientHeight) < 40;
 });
 
-// init
 lang = localStorage.getItem(LANG_KEY) === "en" ? "en" : "pt";
 initTheme();
 applyStatic();

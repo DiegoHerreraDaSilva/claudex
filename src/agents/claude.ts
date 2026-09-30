@@ -18,6 +18,7 @@ export interface RunClaudeAgentOptions {
   onMessage?: ClaudeMessageHandler;
   resumeSessionId?: string;
   timeoutMs?: number;
+  signal?: AbortSignal;
   outputSchema?: Record<string, unknown>;
 }
 
@@ -32,6 +33,10 @@ export async function runClaudeAgent(
 ): Promise<AgentRunResult & { sessionId: string }> {
   const started = Date.now();
   const controller = new AbortController();
+  if (options.signal) {
+    if (options.signal.aborted) controller.abort();
+    else options.signal.addEventListener("abort", () => controller.abort(), { once: true });
+  }
   const timer =
     options.timeoutMs && options.timeoutMs > 0
       ? setTimeout(() => controller.abort(), options.timeoutMs)

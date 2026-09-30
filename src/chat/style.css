@@ -168,6 +168,79 @@ body {
   font-size: 11px;
 }
 
+.icon-btn {
+  background: transparent;
+  border: none;
+  color: var(--faint);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 4px;
+  border-radius: 5px;
+  flex: none;
+}
+
+.icon-btn:hover {
+  color: var(--err);
+  background: var(--hover);
+}
+
+.conversation-list {
+  margin: 7px 0 0 8px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+  display: grid;
+  gap: 2px;
+}
+
+.conversation {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 6px;
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.conversation:hover {
+  background: var(--hover);
+}
+
+.conversation.selected {
+  background: var(--elev);
+}
+
+.conversation .dot {
+  width: 6px;
+  height: 6px;
+}
+
+.conversation-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.new-conv {
+  margin-top: 4px;
+  background: transparent;
+  border: 1px dashed var(--border-strong);
+  color: var(--muted);
+  border-radius: 7px;
+  padding: 5px;
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.new-conv:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
 .muted {
   color: var(--muted);
 }

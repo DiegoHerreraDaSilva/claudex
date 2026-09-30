@@ -14,6 +14,7 @@ import {
   checkout,
   commitAll,
   currentBranch,
+  deleteBranch,
   diffAgainst,
   mergeBranch,
   removeWorktree,
@@ -23,12 +24,13 @@ import {
   ProjectRegistry,
   type ChatMessage,
   type ChatRole,
+  type Conversation,
   type Project,
-  type ProjectSummary,
 } from "./projects.js";
 
 export interface ChatDiff {
   projectId: string;
+  conversationId: string;
   diff: string;
   files: string[];
   branch: string;
@@ -36,10 +38,11 @@ export interface ChatDiff {
 }
 
 export interface ChatEvents {
-  "projects:updated": { projects: ProjectSummary[] };
-  "chat:message": { projectId: string; message: ChatMessage };
+  "projects:updated": { projects: ReturnType<ProjectRegistry["summaries"]> };
+  "chat:message": { projectId: string; conversationId: string; message: ChatMessage };
   "chat:routing": {
     projectId: string;
+    conversationId: string;
     agent: string;
     model: string;
     label: string;
@@ -47,18 +50,26 @@ export interface ChatEvents {
     confidence: number;
     source: string;
   };
-  "chat:turn": { projectId: string; status: "started" | "completed" | "failed"; error?: string };
+  "chat:turn": {
+    projectId: string;
+    conversationId: string;
+    status: "started" | "completed" | "failed" | "stopped";
+    error?: string;
+  };
   "chat:diff": ChatDiff;
-  "chat:status": { projectId: string; text: string };
 }
 
-export interface ChatSnapshot {
-  project: Project;
-  running: boolean;
+export interface ConversationDiff {
   diff: string;
   files: string[];
   branch?: string;
   baseBranch?: string;
+}
+
+export interface ChatSnapshot {
+  project: Project;
+  running: string[];
+  diffs: Record<string, ConversationDiff>;
 }
 
 const planSchema = z.object({
@@ -70,6 +81,7 @@ const PLAN_JSON_SCHEMA = z.toJSONSchema(planSchema) as Record<string, unknown>;
 export class ChatService extends TypedEmitter<ChatEvents> {
   private readonly running = new Set<string>();
   private readonly diffs = new Map<string, ChatDiff>();
+  private readonly aborts = new Map<string, AbortController>();
 
   constructor(
     private readonly registry: ProjectRegistry,
@@ -84,8 +96,8 @@ export class ChatService extends TypedEmitter<ChatEvents> {
     return this.registry;
   }
 
-  isRunning(projectId: string): boolean {
-    return this.running.has(projectId);
+  isRunning(conversationId: string): boolean {
+    return this.running.has(conversationId);
   }
 
   emitProjects(): void {
@@ -95,45 +107,55 @@ export class ChatService extends TypedEmitter<ChatEvents> {
   async snapshot(projectId: string): Promise<ChatSnapshot | null> {
     const project = this.registry.get(projectId);
     if (!project) return null;
-    const cached = this.diffs.get(projectId);
-    let diff = cached?.diff ?? "";
-    let files = cached?.files ?? [];
-    if (!cached && project.worktreePath && project.baseBranch && existsSync(project.worktreePath)) {
-      try {
-        diff = await diffAgainst(project.worktreePath, project.baseBranch);
-        files = parseFiles(diff);
-      } catch {
-        diff = "";
-        files = [];
+    const diffs: Record<string, ConversationDiff> = {};
+    for (const conversation of project.conversations) {
+      const cached = this.diffs.get(conversation.id);
+      if (cached) {
+        diffs[conversation.id] = {
+          diff: cached.diff,
+          files: cached.files,
+          branch: cached.branch,
+          baseBranch: cached.baseBranch,
+        };
+        continue;
+      }
+      if (conversation.worktreePath && project.baseBranch && existsSync(conversation.worktreePath)) {
+        try {
+          const diff = await diffAgainst(conversation.worktreePath, project.baseBranch);
+          diffs[conversation.id] = {
+            diff,
+            files: parseFiles(diff),
+            branch: conversation.branch,
+            baseBranch: project.baseBranch,
+          };
+        } catch {
+          /* ignore */
+        }
       }
     }
-    return {
-      project,
-      running: this.running.has(projectId),
-      diff,
-      files,
-      ...(project.branch ? { branch: project.branch } : {}),
-      ...(project.baseBranch ? { baseBranch: project.baseBranch } : {}),
-    };
+    return { project, running: [...this.running], diffs };
   }
 
-  async send(projectId: string, text: string): Promise<void> {
+  async send(projectId: string, conversationId: string, text: string): Promise<void> {
     const project = this.registry.get(projectId);
-    if (!project) throw new Error("project not found");
-    if (this.running.has(projectId)) throw new Error("project is already running a turn");
+    const conversation = this.registry.getConversation(projectId, conversationId);
+    if (!project || !conversation) throw new Error("project or conversation not found");
+    if (this.running.has(conversationId)) throw new Error("this conversation is already running");
 
-    await this.push(projectId, "user", text);
-    this.running.add(projectId);
+    await this.push(projectId, conversationId, "user", text);
+    this.running.add(conversationId);
     this.emitProjects();
-    this.emit("chat:turn", { projectId, status: "started" });
+    this.emit("chat:turn", { projectId, conversationId, status: "started" });
+
+    const controller = new AbortController();
+    this.aborts.set(conversationId, controller);
 
     try {
-      const { worktreePath, baseBranch, branch } = await this.ensureWorktree(project);
-
+      const { worktreePath, baseBranch, branch } = await this.ensureWorktree(project, conversation);
       const route = await this.jev.routeTask(text);
 
       if (route.route === "implement") {
-        this.emitRouting(projectId, {
+        this.emitRouting(projectId, conversationId, {
           agent: "claude:sonnet",
           model: "sonnet",
           label: "simples implementacao",
@@ -143,8 +165,11 @@ export class ChatService extends TypedEmitter<ChatEvents> {
         });
         await this.push(
           projectId,
+          conversationId,
           "routing",
           `Jev: simples implementacao -> Sonnet (conf ${route.confidence.toFixed(2)}, ${route.source})`,
+          undefined,
+          "route.implement",
         );
         const run = await runClaudeAgent({
           prompt: text,
@@ -153,15 +178,16 @@ export class ChatService extends TypedEmitter<ChatEvents> {
           allowedTools: [...CLAUDE_TOOLS.implementer],
           maxTurns: 30,
           timeoutMs: this.config.agentTimeoutMs,
-          ...(project.claudeSessionId ? { resumeSessionId: project.claudeSessionId } : {}),
-          onMessage: (message) => this.streamClaude(projectId, message),
+          signal: controller.signal,
+          ...(conversation.claudeSessionId ? { resumeSessionId: conversation.claudeSessionId } : {}),
+          onMessage: (message) => this.streamClaude(projectId, conversationId, message),
         });
-        await this.registry.update(projectId, {
+        await this.registry.updateConversation(projectId, conversationId, {
           claudeSessionId: run.sessionId,
           activeAgent: "claude:sonnet",
         });
       } else {
-        this.emitRouting(projectId, {
+        this.emitRouting(projectId, conversationId, {
           agent: "claude:opus",
           model: "opus",
           label: "precisa planejar",
@@ -171,8 +197,11 @@ export class ChatService extends TypedEmitter<ChatEvents> {
         });
         await this.push(
           projectId,
+          conversationId,
           "routing",
           `Jev: precisa planejar -> Opus (conf ${route.confidence.toFixed(2)}, ${route.source})`,
+          undefined,
+          "route.plan",
         );
 
         const planner = await runClaudeAgent({
@@ -182,16 +211,17 @@ export class ChatService extends TypedEmitter<ChatEvents> {
           allowedTools: [...CLAUDE_TOOLS.planner],
           maxTurns: 8,
           timeoutMs: this.config.agentTimeoutMs,
+          signal: controller.signal,
           outputSchema: PLAN_JSON_SCHEMA,
         });
         const plan = parsePlan(planner.result);
         const complex = plan.complexity === "complex";
         const workerPrompt = `${text}\n\nPlano aprovado:\n${plan.plan}`;
-        await this.push(projectId, "assistant", plan.plan);
+        await this.push(projectId, conversationId, "assistant", plan.plan);
 
         if (complex) {
           const label = `codex:${this.config.defaultComplexModel}`;
-          this.emitRouting(projectId, {
+          this.emitRouting(projectId, conversationId, {
             agent: label,
             model: this.config.defaultComplexModel,
             label: "feature complexa",
@@ -201,23 +231,27 @@ export class ChatService extends TypedEmitter<ChatEvents> {
           });
           await this.push(
             projectId,
+            conversationId,
             "routing",
             `Opus: feature complexa -> ${this.config.defaultComplexModel}`,
+            undefined,
+            "plan.complex",
           );
           const run = await runCodexAgent({
             prompt: workerPrompt,
             worktreePath,
             model: this.config.defaultComplexModel,
             timeoutMs: this.config.agentTimeoutMs,
-            ...(project.codexThreadId ? { resumeThreadId: project.codexThreadId } : {}),
-            onEvent: (event) => this.streamCodex(projectId, event),
+            signal: controller.signal,
+            ...(conversation.codexThreadId ? { resumeThreadId: conversation.codexThreadId } : {}),
+            onEvent: (event) => this.streamCodex(projectId, conversationId, event),
           });
-          await this.registry.update(projectId, {
+          await this.registry.updateConversation(projectId, conversationId, {
             codexThreadId: run.threadId,
             activeAgent: label,
           });
         } else {
-          this.emitRouting(projectId, {
+          this.emitRouting(projectId, conversationId, {
             agent: "claude:sonnet",
             model: "sonnet",
             label: "feature mais simples",
@@ -225,7 +259,7 @@ export class ChatService extends TypedEmitter<ChatEvents> {
             confidence: 1,
             source: "planner",
           });
-          await this.push(projectId, "routing", "Opus: feature mais simples -> Sonnet");
+          await this.push(projectId, conversationId, "routing", "Opus: feature mais simples -> Sonnet", undefined, "plan.simple");
           const run = await runClaudeAgent({
             prompt: workerPrompt,
             model: "sonnet",
@@ -233,10 +267,11 @@ export class ChatService extends TypedEmitter<ChatEvents> {
             allowedTools: [...CLAUDE_TOOLS.implementer],
             maxTurns: 30,
             timeoutMs: this.config.agentTimeoutMs,
-            ...(project.claudeSessionId ? { resumeSessionId: project.claudeSessionId } : {}),
-            onMessage: (message) => this.streamClaude(projectId, message),
+            signal: controller.signal,
+            ...(conversation.claudeSessionId ? { resumeSessionId: conversation.claudeSessionId } : {}),
+            onMessage: (message) => this.streamClaude(projectId, conversationId, message),
           });
-          await this.registry.update(projectId, {
+          await this.registry.updateConversation(projectId, conversationId, {
             claudeSessionId: run.sessionId,
             activeAgent: "claude:sonnet",
           });
@@ -247,87 +282,120 @@ export class ChatService extends TypedEmitter<ChatEvents> {
       const diff = await diffAgainst(worktreePath, baseBranch);
       const chatDiff: ChatDiff = {
         projectId,
+        conversationId,
         diff,
         files: parseFiles(diff),
         branch,
         baseBranch,
       };
-      this.diffs.set(projectId, chatDiff);
+      this.diffs.set(conversationId, chatDiff);
       this.emit("chat:diff", chatDiff);
-      this.emit("chat:turn", { projectId, status: "completed" });
+      this.emit("chat:turn", { projectId, conversationId, status: "completed" });
     } catch (err) {
+      const stopped = controller.signal.aborted;
       const message = err instanceof Error ? err.message : String(err);
-      await this.push(projectId, "error", message);
-      this.emit("chat:turn", { projectId, status: "failed", error: message });
+      await this.push(projectId, conversationId, stopped ? "system" : "error", stopped ? "stopped by user" : message);
+      this.emit("chat:turn", {
+        projectId,
+        conversationId,
+        status: stopped ? "stopped" : "failed",
+        ...(stopped ? {} : { error: message }),
+      });
     } finally {
-      this.running.delete(projectId);
+      this.aborts.delete(conversationId);
+      this.running.delete(conversationId);
       this.emitProjects();
     }
   }
 
-  async apply(projectId: string): Promise<{ ok: boolean; reason?: string }> {
+  stop(projectId: string, conversationId: string): void {
+    this.aborts.get(conversationId)?.abort();
+    void projectId;
+  }
+
+  async apply(projectId: string, conversationId: string): Promise<{ ok: boolean; reason?: string }> {
     const project = this.registry.get(projectId);
-    if (!project || !project.branch || !project.baseBranch) {
-      return { ok: false, reason: "project has no branch yet" };
+    const conversation = this.registry.getConversation(projectId, conversationId);
+    if (!project || !conversation || !conversation.branch || !project.baseBranch) {
+      return { ok: false, reason: "conversation has no branch yet" };
     }
     const current = await currentBranch(project.rootPath);
     if (current !== project.baseBranch) {
-      await this.push(projectId, "system", `checkout ${project.baseBranch} (was ${current})`);
+      await this.push(projectId, conversationId, "system", `checkout ${project.baseBranch} (was ${current})`);
       await checkout(project.rootPath, project.baseBranch);
     }
-    const result = await mergeBranch(project.rootPath, project.branch);
+    const result = await mergeBranch(project.rootPath, conversation.branch);
     if (result.ok) {
-      await this.push(projectId, "system", `applied ${project.branch} into ${project.baseBranch}`);
-      this.diffs.delete(projectId);
+      await this.push(projectId, conversationId, "system", `applied ${conversation.branch} into ${project.baseBranch}`);
+      this.diffs.delete(conversationId);
       this.emit("chat:diff", {
         projectId,
+        conversationId,
         diff: "",
         files: [],
-        branch: project.branch,
+        branch: conversation.branch,
         baseBranch: project.baseBranch,
       });
       return { ok: true };
     }
     const reason = result.conflicts?.join("; ") ?? result.reason ?? "merge failed";
-    await this.push(projectId, "error", `apply failed: ${reason}`);
+    await this.push(projectId, conversationId, "error", `apply failed: ${reason}`);
     return { ok: false, reason };
   }
 
-  async discard(projectId: string): Promise<{ ok: boolean; reason?: string }> {
+  async discard(projectId: string, conversationId: string): Promise<{ ok: boolean; reason?: string }> {
     const project = this.registry.get(projectId);
-    if (!project || !project.worktreePath || !project.baseBranch) {
+    const conversation = this.registry.getConversation(projectId, conversationId);
+    if (!project || !conversation || !conversation.worktreePath || !project.baseBranch) {
       return { ok: false, reason: "nothing to discard" };
     }
-    await resetHard(project.worktreePath, project.baseBranch);
-    this.diffs.delete(projectId);
-    await this.push(projectId, "system", "discarded pending changes");
+    await resetHard(conversation.worktreePath, project.baseBranch);
+    this.diffs.delete(conversationId);
+    await this.push(projectId, conversationId, "system", "discarded pending changes");
     this.emit("chat:diff", {
       projectId,
+      conversationId,
       diff: "",
       files: [],
-      branch: project.branch ?? "",
+      branch: conversation.branch ?? "",
       baseBranch: project.baseBranch,
     });
     return { ok: true };
   }
 
+  async removeConversation(projectId: string, conversationId: string): Promise<void> {
+    const project = this.registry.get(projectId);
+    const conversation = this.registry.getConversation(projectId, conversationId);
+    if (project && conversation) {
+      if (conversation.worktreePath) await removeWorktree(project.rootPath, conversation.worktreePath);
+      if (conversation.branch) await deleteBranch(project.rootPath, conversation.branch);
+    }
+    await this.registry.deleteConversation(projectId, conversationId);
+    this.diffs.delete(conversationId);
+    this.emitProjects();
+  }
+
   async removeProject(projectId: string): Promise<void> {
     const project = this.registry.get(projectId);
-    if (project?.worktreePath) {
-      await removeWorktree(project.rootPath, project.worktreePath);
+    if (project) {
+      for (const conversation of project.conversations) {
+        if (conversation.worktreePath) await removeWorktree(project.rootPath, conversation.worktreePath);
+        if (conversation.branch) await deleteBranch(project.rootPath, conversation.branch);
+        this.diffs.delete(conversation.id);
+      }
     }
     await this.registry.remove(projectId);
-    this.diffs.delete(projectId);
     this.emitProjects();
   }
 
   private async ensureWorktree(
     project: Project,
+    conversation: Conversation,
   ): Promise<{ worktreePath: string; branch: string; baseBranch: string }> {
     const root = project.rootPath;
     const baseBranch = project.baseBranch ?? (await currentBranch(root));
-    const branch = project.branch ?? `claudex/chat-${project.id.slice(0, 8)}`;
-    const worktreePath = project.worktreePath ?? path.join(this.worktreesBase, project.id);
+    const branch = conversation.branch ?? `claudex/${project.id.slice(0, 6)}-${conversation.id.slice(0, 6)}`;
+    const worktreePath = conversation.worktreePath ?? path.join(this.worktreesBase, conversation.id);
 
     await mkdir(this.worktreesBase, { recursive: true });
     const ready = existsSync(worktreePath) && existsSync(path.join(worktreePath, ".git"));
@@ -339,22 +407,26 @@ export class ChatService extends TypedEmitter<ChatEvents> {
         await addWorktree(root, worktreePath, branch, baseBranch);
       }
     }
-    await this.registry.update(project.id, { baseBranch, branch, worktreePath });
+    await this.registry.update(project.id, { baseBranch });
+    await this.registry.updateConversation(project.id, conversation.id, { branch, worktreePath });
     return { worktreePath, branch, baseBranch };
   }
 
   private emitRouting(
     projectId: string,
-    data: Omit<ChatEvents["chat:routing"], "projectId">,
+    conversationId: string,
+    data: Omit<ChatEvents["chat:routing"], "projectId" | "conversationId">,
   ): void {
-    this.emit("chat:routing", { projectId, ...data });
+    this.emit("chat:routing", { projectId, conversationId, ...data });
   }
 
   private async push(
     projectId: string,
+    conversationId: string,
     role: ChatRole,
     text: string,
     meta?: string,
+    code?: string,
   ): Promise<ChatMessage> {
     const message: ChatMessage = {
       id: uuid(),
@@ -362,53 +434,54 @@ export class ChatService extends TypedEmitter<ChatEvents> {
       role,
       text,
       ...(meta ? { meta } : {}),
+      ...(code ? { code } : {}),
     };
-    await this.registry.addMessage(projectId, message);
-    this.emit("chat:message", { projectId, message });
+    await this.registry.addMessage(projectId, conversationId, message);
+    this.emit("chat:message", { projectId, conversationId, message });
     return message;
   }
 
-  private streamClaude(projectId: string, message: unknown): void {
+  private streamClaude(projectId: string, conversationId: string, message: unknown): void {
     const record = message as { type?: string; subtype?: string; session_id?: string };
     if (record.type === "system" && record.subtype === "init") {
-      void this.push(projectId, "system", `session ${record.session_id ?? "?"}`);
+      void this.push(projectId, conversationId, "system", `session ${record.session_id ?? "?"}`);
       return;
     }
     if (record.type === "assistant") {
       const content = (message as { message?: { content?: unknown[] } }).message?.content ?? [];
       for (const block of content) {
         const item = block as { type?: string; text?: string; name?: string; input?: unknown };
-        if (item.type === "text" && item.text) void this.push(projectId, "assistant", item.text);
+        if (item.type === "text" && item.text) void this.push(projectId, conversationId, "assistant", item.text);
         else if (item.type === "tool_use") {
-          void this.push(projectId, "tool", item.name ?? "tool", shortJson(item.input));
+          void this.push(projectId, conversationId, "tool", item.name ?? "tool", shortJson(item.input));
         }
       }
       return;
     }
     if (record.type === "result" && record.subtype === "success") {
       const text = (message as { result?: string }).result ?? "";
-      if (text) void this.push(projectId, "result", text);
+      if (text) void this.push(projectId, conversationId, "result", text);
     }
   }
 
-  private streamCodex(projectId: string, event: unknown): void {
+  private streamCodex(projectId: string, conversationId: string, event: unknown): void {
     const e = event as {
       type?: string;
       thread_id?: string;
       item?: { type?: string; text?: string; command?: string; changes?: unknown[] };
     };
     if (e.type === "thread.started") {
-      void this.push(projectId, "system", `thread ${e.thread_id ?? "?"}`);
+      void this.push(projectId, conversationId, "system", `thread ${e.thread_id ?? "?"}`);
       return;
     }
     if (e.type !== "item.completed" && e.type !== "item.started" && e.type !== "item.updated") return;
     const item = e.item;
     if (!item) return;
-    if (item.type === "agent_message" && item.text) void this.push(projectId, "assistant", item.text);
-    else if (item.type === "reasoning" && item.text) void this.push(projectId, "assistant", item.text);
-    else if (item.type === "command_execution" && item.command) void this.push(projectId, "tool", item.command);
+    if (item.type === "agent_message" && item.text) void this.push(projectId, conversationId, "assistant", item.text);
+    else if (item.type === "reasoning" && item.text) void this.push(projectId, conversationId, "assistant", item.text);
+    else if (item.type === "command_execution" && item.command) void this.push(projectId, conversationId, "tool", item.command);
     else if (item.type === "file_change" && item.changes) {
-      void this.push(projectId, "tool", "file_change", shortJson(item.changes));
+      void this.push(projectId, conversationId, "tool", "file_change", shortJson(item.changes));
     }
   }
 }
@@ -428,16 +501,13 @@ function parsePlan(text: string): { complexity: "complex" | "simple"; plan: stri
   const end = text.lastIndexOf("}");
   if (start !== -1 && end > start) {
     try {
-      const parsed = JSON.parse(text.slice(start, end + 1)) as {
-        complexity?: unknown;
-        plan?: unknown;
-      };
+      const parsed = JSON.parse(text.slice(start, end + 1)) as { complexity?: unknown; plan?: unknown };
       return {
         complexity: parsed.complexity === "complex" ? "complex" : "simple",
         plan: typeof parsed.plan === "string" ? parsed.plan : text,
       };
     } catch {
-      // fall through
+      /* fall through */
     }
   }
   return { complexity: "simple", plan: text.slice(0, 800) };
