@@ -66,6 +66,7 @@
   "build": {
     "appId": "ai.claudex.app",
     "productName": "Claudex",
+    "artifactName": "${productName}-${version}-setup.${ext}",
     "files": [
       "dist/**/*",
       "desktop/**/*",
