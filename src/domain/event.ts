@@ -1,5 +1,6 @@
 export type MissionEventType =
   | "mission:started"
+  | "mission:applied"
   | "mission:completed"
   | "mission:failed"
   | "mission:stopped"
@@ -15,6 +16,7 @@ export type MissionEventType =
   | "checkpoint:created"
   | "verification:started"
   | "verification:completed"
+  | "review:started"
   | "review:completed";
 
 export type MissionEventLevel = "info" | "warn" | "error" | "success";

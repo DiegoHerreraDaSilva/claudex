@@ -1,6 +1,7 @@
-import { appendFile, mkdir, readFile, readdir } from "node:fs/promises";
+import { appendFile, mkdir, readFile, readdir, writeFile, rename } from "node:fs/promises";
 import path from "node:path";
 import { v4 as uuid } from "uuid";
+import { projectMissionEvent, type MissionSummary } from "../../domain/missionSummary.js";
 import type { MissionEventInput, TaskEvent } from "../../domain/event.js";
 
 /**
@@ -39,7 +40,14 @@ export class EventStore {
     const previous = this.queues.get(missionId) ?? Promise.resolve();
     const next = previous.then(async () => {
       await mkdir(this.dirFor(missionId), { recursive: true });
+      const previousSummary = await this.readSummary(missionId);
       await appendFile(this.fileFor(missionId), `${JSON.stringify(full)}\n`, "utf8");
+      const summary = projectMissionEvent(previousSummary, full);
+      if (summary) {
+        const file = path.join(this.dirFor(missionId), "mission.json");
+        await writeFile(`${file}.tmp`, JSON.stringify(summary, null, 2), "utf8");
+        await rename(`${file}.tmp`, file);
+      }
     });
     this.queues.set(
       missionId,
@@ -67,6 +75,17 @@ export class EventStore {
       }
     }
     return events;
+  }
+
+  async readSummary(missionId: string): Promise<MissionSummary | undefined> {
+    try {
+      const raw = await readFile(path.join(this.dirFor(missionId), "mission.json"), "utf8");
+      return JSON.parse(raw) as MissionSummary;
+    } catch {
+      let summary: MissionSummary | undefined;
+      for (const event of await this.read(missionId)) summary = projectMissionEvent(summary, event);
+      return summary;
+    }
   }
 
   async listMissions(): Promise<string[]> {

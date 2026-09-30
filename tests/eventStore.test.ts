@@ -50,6 +50,15 @@ describe("EventStore", () => {
     expect(events.map((e) => e.type)).toEqual(["mission:started", "mission:completed"]);
   });
 
+  it("persists a mission projection that survives restart", async () => {
+    const dir = await makeDir();
+    const store = new EventStore(dir);
+    await store.append("m1", { type: "mission:started", level: "info", message: "implement", payload: { projectId: "p" } });
+    await store.append("m1", { type: "mission:failed", level: "error", message: "tests failed" });
+    const restored = await new EventStore(dir).readSummary("m1");
+    expect(restored).toMatchObject({ id: "m1", projectId: "p", status: "failed", error: "tests failed" });
+  });
+
   it("returns an empty list for an unknown mission", async () => {
     const store = new EventStore(await makeDir());
     expect(await store.read("nope")).toEqual([]);

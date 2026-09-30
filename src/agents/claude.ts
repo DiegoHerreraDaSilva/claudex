@@ -14,6 +14,7 @@ export interface RunClaudeAgentOptions {
   worktreePath: string;
   allowedTools?: string[];
   disallowedTools?: string[];
+  tools?: string[];
   maxTurns?: number;
   onMessage?: ClaudeMessageHandler;
   resumeSessionId?: string;
@@ -125,6 +126,7 @@ export async function runClaudeAgent(
         permissionMode: "bypassPermissions",
         allowDangerouslySkipPermissions: true,
         ...(options.allowedTools ? { allowedTools: options.allowedTools } : {}),
+        ...(options.tools ? { tools: options.tools } : {}),
         ...(options.disallowedTools ? { disallowedTools: options.disallowedTools } : {}),
         ...(options.resumeSessionId ? { resume: options.resumeSessionId } : {}),
         ...(options.outputSchema
@@ -139,7 +141,9 @@ export async function runClaudeAgent(
       if (id) sessionId = id;
       if (message.type === "result") {
         if (message.subtype === "success") {
-          resultText = message.result;
+          resultText = options.outputSchema && message.structured_output !== undefined
+            ? JSON.stringify(message.structured_output)
+            : message.result;
           usage = readUsage(message);
         } else {
           failure = message.subtype;
