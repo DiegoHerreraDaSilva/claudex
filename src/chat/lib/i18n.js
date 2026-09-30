@@ -3,6 +3,14 @@ export const LANG_KEY = "claudex-lang";
 
 export const I18N = {
   pt: {
+    browserQa: "Teste no navegador",
+    browserQaHint: "Inicie o aplicativo da missão e informe sua URL local. A verificação abre a página em um perfil isolado, registra erros e captura a tela. Recursos de outros endereços são bloqueados. Não testa cliques ou fluxos completos.",
+    browserQaRun: "testar no navegador",
+    browserQaUrl: "URL local do aplicativo",
+    browserQaBrowser: "navegador instalado",
+    browserQaWorking: "verificando a página…",
+    browserQaCapture: "ver captura da página",
+
     prStateOPEN: "aberto",
     prStateCLOSED: "fechado",
     prStateMERGED: "integrado",
@@ -318,6 +326,14 @@ export const I18N = {
     checksSkipped: "checks não executados",
   },
   en: {
+    browserQa: "Browser check",
+    browserQaHint: "Start the mission app and enter its local URL. The check opens the page in an isolated profile, records errors and captures a screenshot. Resources from other origins are blocked. It does not test clicks or complete workflows.",
+    browserQaRun: "run browser check",
+    browserQaUrl: "local application URL",
+    browserQaBrowser: "installed browser",
+    browserQaWorking: "checking the page…",
+    browserQaCapture: "view page capture",
+
     prStateOPEN: "open",
     prStateCLOSED: "closed",
     prStateMERGED: "merged",

@@ -335,6 +335,18 @@ describe("phase 3 mission integration", () => {
       return { stdout, stderr: "", code: 0, durationMs: 1 };
     });
     const github = new MissionGitHubService(f.chat, f.registry, f.config.worktreesDir, fakeGitHub);
+    for (const status of ["running", "failed"]) {
+      await f.chat.recordMissionEvent(f.conversationId, {
+        type: "browser:checked", level: "info", message: "QA fixture",
+        payload: { verification: { id: "qa", missionId: f.conversationId, kind: "browser", status, summary: "QA", at: Date.now() } },
+      });
+      await expect(github.preview(f.conversationId)).rejects.toMatchObject({ code: "MISSION_NOT_READY" });
+      expect((await f.chat.apply(f.project.id, f.conversationId)).ok).toBe(false);
+    }
+    await f.chat.recordMissionEvent(f.conversationId, {
+      type: "browser:checked", level: "success", message: "QA fixture passed",
+      payload: { verification: { id: "qa", missionId: f.conversationId, kind: "browser", status: "passed", summary: "QA", at: Date.now() } },
+    });
     const preview = await github.preview(f.conversationId);
     expect(preview).toMatchObject({
       expectedHead: summary!.head,

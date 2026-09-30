@@ -1,4 +1,4 @@
-export type VerificationKind = "typecheck" | "build" | "tests" | "lint" | "security";
+export type VerificationKind = "typecheck" | "build" | "tests" | "lint" | "security" | "browser";
 
 export type VerificationStatus = "running" | "passed" | "failed" | "skipped";
 
@@ -12,4 +12,6 @@ export interface VerificationRun {
   durationMs?: number;
   testCount?: number;
   at: number;
+  screenshot?: string;
+  head?: string;
 }

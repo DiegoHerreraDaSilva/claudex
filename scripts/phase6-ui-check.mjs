@@ -113,6 +113,16 @@ const server = createServer(async (req, res) => {
       for await (const chunk of req) raw += chunk;
       const body = raw ? JSON.parse(raw) : {};
       requests.push({ path: url.pathname, body });
+      if (url.pathname.endsWith("/browser-qa")) {
+        const verification = { id: "12345678-1234-1234-1234-123456789abc", missionId: conversation.id,
+          kind: "browser", status: "passed", summary: "Page loaded", output: "Fixture <script>unsafe()</script>",
+          at: Date.now(), head: body.expectedHead,
+          screenshot: `/api/missions/${conversation.id}/browser-qa/12345678-1234-1234-1234-123456789abc/screenshot` };
+        summary.verification = [...summary.verification.filter(item => item.kind !== "browser"), verification];
+        summary.revision++;
+        broadcast({ type: "mission:summary", summary });
+        res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(verification)); return;
+      }
       if (url.pathname.endsWith("/pr")) {
         summary.pullRequest = { ...pullRequest, title: body.title, isDraft: body.draft };
         summary.revision++;
@@ -363,6 +373,15 @@ app.whenReady().then(async () => {
     await waitFor(
       "!!document.querySelector('.pr-prepare') && !document.querySelector('.pr-prepare').disabled",
     );
+    await evaluate("document.querySelector('.browser-qa-open').click()");
+    await waitFor("!!document.querySelector('.browser-qa-dialog[open]')");
+    await evaluate("{ const dialog = document.querySelector('.browser-qa-dialog'); dialog.querySelector('input').value = 'http://localhost:3000'; dialog.querySelector('select').value = 'msedge'; dialog.querySelector('form').requestSubmit(); }");
+    await waitFor("!!document.querySelector('.browser-qa-capture') && !document.querySelector('.browser-qa-open').disabled");
+    const qaRequest = requests.find(item => item.path.endsWith('/browser-qa'));
+    assert.deepEqual(qaRequest.body, { url: 'http://localhost:3000', channel: 'msedge', expectedHead: summary.head });
+    assert.equal(await evaluate("!!document.querySelector('.browser-qa-section script')"), false);
+    assert.equal(await evaluate("document.querySelector('.browser-qa-capture').getAttribute('href')"), `/api/missions/${conversation.id}/browser-qa/12345678-1234-1234-1234-123456789abc/screenshot`);
+    await capture("phase6-browser-qa");
     await evaluate("document.querySelector('.pr-prepare').click()");
     await waitFor("!!document.querySelector('.pr-dialog[open]')");
     assert.equal(
@@ -446,13 +465,14 @@ app.whenReady().then(async () => {
     conversation.autonomy = "manual";
     broadcast({ type: "projects", data: [project] });
     await waitFor(
-      "document.querySelector('.pr-prepare').disabled && document.querySelector('.ci-refresh').disabled",
+      "document.querySelector('.pr-prepare').disabled && document.querySelector('.ci-refresh').disabled && document.querySelector('.browser-qa-open').disabled",
     );
     assert.deepEqual(errors, []);
     console.log(
       JSON.stringify({
         status: "passed",
         checks: [
+          "Browser QA form, capture, reviewed head, escaped output and manual block",
           "PR preview",
           "exact multiline body",
           "reviewed head",

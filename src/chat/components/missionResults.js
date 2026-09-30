@@ -1,3 +1,4 @@
+import { renderBrowserQA } from "./browserQA.js";
 import { renderGitHub } from "./github.js";
 import { el } from "../lib/dom.js";
 import { t } from "../lib/i18n.js";
@@ -28,6 +29,7 @@ export function renderMissionResults(actions) {
   }
   host.appendChild(renderVerification(summary));
   host.appendChild(renderReview(summary, actions));
+  host.appendChild(renderBrowserQA(actions));
   host.appendChild(renderGitHub(actions));
   if (summary?.status === "analysed") {
     host.appendChild(el("p", { text: t("manualAnalysis") }));
@@ -138,7 +140,7 @@ function renderCompletion(summary, actions) {
     class: `mission-complete ${summary.status}`,
     "aria-label": t(titles[summary.status]),
   });
-  card.appendChild(el("h2", { class: "mission-complete-title", text: t(titles[summary.status]) }));
+  card.appendChild(el("h2", { class: "mission-complete-title", text: t(summary.verification.some((run) => run.status === "failed") ? "missionNeedsCorrection" : titles[summary.status]) }));
   const tests = summary.verification.find((run) => run.kind === "tests");
   const metrics = el("div", { class: "completion-metrics" }, [
     el("span", {
@@ -178,7 +180,7 @@ function renderCompletion(summary, actions) {
         el("button", {
           class: "primary-btn",
           text: t("apply"),
-          disabled: !canAct || summary.status !== "ready",
+          disabled: !canAct || summary.status !== "ready" || summary.verification.some((run) => ["failed", "running"].includes(run.status)),
           onclick: () => actions.chatAction("apply"),
         }),
         el("button", {

@@ -2203,3 +2203,8 @@ body {
 .pr-dialog textarea { resize: vertical; }
 .pr-dialog code { display: block; overflow-wrap: anywhere; }
 .pr-draft { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+
+.browser-qa-dialog input, .browser-qa-dialog select { width: 100%; box-sizing: border-box; margin: 6px 0 14px; padding: 8px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--elev); color: var(--text); font: inherit; }
+.browser-qa-section a { color: var(--accent-strong); }
+.browser-qa-section .verification-output { overflow-wrap: anywhere; white-space: pre-wrap; }
+.browser-qa-section > strong { display: block; margin-top: 12px; }

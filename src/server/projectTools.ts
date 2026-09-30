@@ -1,3 +1,4 @@
+import { MissionBrowserService } from "../application/missionBrowserService.js";
 import { MissionGitHubService } from "../application/missionGitHubService.js";
 import { GitHubError } from "../infrastructure/github.js";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -23,6 +24,7 @@ export function projectToolsRoutes(
   worktreesBase: string,
   emit: (event: TerminalOutput) => void,
 ) {
+  const browser = new MissionBrowserService(chat, registry, worktreesBase, dataDir);
   const github = new MissionGitHubService(chat, registry, worktreesBase);
   const memory = new MemoryService(path.join(dataDir, "memory"));
   const checkpoints = new CheckpointService(path.join(dataDir, "checkpoints"));
@@ -50,7 +52,7 @@ export function projectToolsRoutes(
         url.pathname,
       );
     const missionMatch =
-      /^\/api\/missions\/([^/]+)\/(checkpoints|restore|pr|checks|pr\/preview)$/.exec(url.pathname);
+      /^\/api\/missions\/([^/]+)\/(checkpoints|restore|pr|checks|pr\/preview|browser-qa(?:\/[a-f0-9-]{36}\/screenshot)?)$/.exec(url.pathname);
     const autonomyMatch = /^\/api\/projects\/([^/]+)\/conversations\/([^/]+)\/autonomy$/.exec(
       url.pathname,
     );
@@ -114,6 +116,21 @@ export function projectToolsRoutes(
             .some((project) => project.conversations.some((item) => item.id === missionId))
         ) {
           json(res, 404, { error: "mission not found" });
+          return true;
+        }
+        if (missionMatch[2] === "browser-qa" && method === "POST") {
+          const input = z.object({
+            url: z.string().trim().min(1).max(2000),
+            channel: z.enum(["chrome", "msedge"]),
+            expectedHead: z.string().regex(/^[a-f0-9]{40,64}$/),
+          }).parse(await body(req));
+          json(res, 200, await browser.check(missionId, input));
+          return true;
+        }
+        if (missionMatch[2].startsWith("browser-qa/") && method === "GET") {
+          const capture = await browser.screenshot(missionId, missionMatch[2].split("/")[1]);
+          res.writeHead(200, { "Content-Type": "image/png", "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store" });
+          res.end(capture);
           return true;
         }
         if (missionMatch[2] === "pr/preview" && method === "GET") {

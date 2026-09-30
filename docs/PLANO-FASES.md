@@ -2,8 +2,8 @@
 
 > Documento de handoff. Descreve o estado atual do projeto e o plano detalhado
 > para continuar o desenvolvimento em outras sessões.
-> Última atualização: 30/09/2026, após a integração GitHub/CI da Fase 6.
-> Fases 3–5 concluídas localmente. Fase 6: GitHub/CI implementados; Browser QA e validação GitHub autenticada pendentes. Ver [entrega da Fase 6](FASE-6.md).
+> Última atualização: 30/09/2026, após GitHub/CI e Browser QA da Fase 6.
+> Fases 3–5 concluídas localmente. Fase 6: GitHub/CI e Browser QA implementados e validados localmente; publicação autenticada em validação. Ver [entrega da Fase 6](FASE-6.md).
 
 ---
 
@@ -400,15 +400,15 @@ terminal, git workspace, checkpoints e histórico de missões.
 
 ### 6.1 GitHub (`src/infrastructure/github.ts`)
 
-Implementado localmente; ver [FASE-6.md](FASE-6.md). O `gh` está instalado, mas foi verificado sem login nesta máquina.
+Implementado localmente; ver [FASE-6.md](FASE-6.md). O `gh` está instalado e autenticado; o acesso ao repositório foi confirmado.
 - Usar `gh`; autenticar com `gh auth login` antes da validação com GitHub real.
 - `POST /api/missions/:id/pr` → abre PR da branch da missão (`gh pr create`).
 - `GET /api/missions/:id/checks` → `gh pr checks` (status de CI).
 
 ### 6.2 Browser QA
-- Opção A: Playwright (dependência nova, mais fiel).
-- Opção B: janela Electron oculta (sem dep nova, menos fiel).
-- **Decisão pendente do usuário** antes de implementar.
+- Escolha resolvida: Playwright com Google Chrome ou Microsoft Edge instalado, conforme preferência do usuário.
+- Implementado: verificação de carregamento local, erros e captura no Mission Center; ver [FASE-6.md](FASE-6.md).
+- Perfil isolado, origem local restrita e respeito aos modos de autonomia.
 
 ### 6.3 Critérios de aceite
 - Abrir PR a partir de uma missão pronta e ver o status dos checks.
@@ -459,7 +459,7 @@ ou `notify`. O `actions` é montado em `app.js` (um único objeto).
 
 1. **Ask-repo / embeddings**: sem provider de embeddings. Plano inicial é busca
    léxica + índice de símbolos; embeddings depois (via Jev ou API).
-2. **Browser QA**: Playwright (pesado) vs janela Electron oculta. Aguarda decisão.
+2. **Browser QA**: resolvido com `playwright-core` e Chrome/Edge instalado. Escopo atual: carregamento local e captura; fluxos completos não estão incluídos.
 3. **SQLite**: adiado. `node:sqlite` não existe no Electron 33 (Node 20) e
    `better-sqlite3` exige rebuild nativo. Manter JSONL + JSON.
 4. **Custo `$`** é estimativa (tabela em `pricing.ts`); Codex subscription não

@@ -31,7 +31,7 @@ export function renderGitHub(actions) {
     el("button", {
       class: "ghost-btn pr-prepare",
       text: t(summary.pullRequest ? "preparePrAgain" : "preparePr"),
-      disabled: blocked || summary.status !== "ready",
+      disabled: blocked || summary.status !== "ready" || summary.verification.some((run) => ["failed", "running"].includes(run.status)),
       onclick: () => preparePullRequest(actions),
     }),
   );

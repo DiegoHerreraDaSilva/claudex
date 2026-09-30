@@ -47,6 +47,7 @@
     "axios": "^1.7.9",
     "chalk": "^5.4.1",
     "electron-updater": "^6.3.9",
+    "playwright-core": "^1.63.0",
     "uuid": "^11.0.5",
     "ws": "^8.18.0",
     "zod": "^4.0.0"

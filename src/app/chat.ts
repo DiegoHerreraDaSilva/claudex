@@ -414,7 +414,11 @@ export class ChatService extends TypedEmitter<ChatEvents> {
     if (this.running.has(conversationId)) return { ok: false, reason: "mission is still running" };
     await this.requireAction(projectId, conversationId, "git", "Apply mission changes");
     const summary = await this.missionSummary(conversationId);
-    if ((conversation.validationRequired && !summary) || (summary && summary.status !== "ready"))
+    if (
+      (conversation.validationRequired && !summary) ||
+      (summary && (summary.status !== "ready" ||
+        summary.verification.some((run) => run.status === "failed" || run.status === "running")))
+    )
       return { ok: false, reason: "mission has not passed verification and review" };
     if (conversation.worktreePath) {
       const status = await runGit(conversation.worktreePath, ["status", "--porcelain"]);

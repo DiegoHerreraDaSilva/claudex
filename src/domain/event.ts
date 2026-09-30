@@ -1,4 +1,5 @@
 export type MissionEventType =
+  | "browser:checked"
   | "github:publishing"
   | "github:pull-request"
   | "github:checks"

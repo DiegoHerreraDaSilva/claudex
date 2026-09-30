@@ -1,6 +1,6 @@
-# Fase 6 — GitHub e CI
+# Fase 6 — GitHub, CI e Browser QA
 
-Entrega local da integração GitHub/PR/CI na branch `codex/phase6-devops`, baseada na fase 5. Sem alteração de versão, release ou dependências. Browser QA como ferramenta para as aplicações das missões permanece pendente da escolha entre Electron oculto e Playwright, conforme a seção 6.2 do plano. O smoke da interface do Claudex usa a infraestrutura Electron já existente.
+Integração GitHub/PR/CI e Browser QA na branch `codex/phase6-devops`, baseada na fase 5. A escolha foi resolvida com Playwright para Google Chrome ou Microsoft Edge, conforme a preferência do usuário. `playwright-core` é dependência de runtime; não baixa navegadores. Usa os navegadores instalados, sem perfil pessoal ou login do usuário. Sem alteração de versão ou release. O smoke da interface do Claudex continua usando Electron.
 
 ## Fluxo de PR
 
@@ -39,13 +39,29 @@ A prévia é local: consulta os remotes Git e o estado de autenticação do CLI,
 ## Validação e pendências
 
 - Build/typecheck, lint sem avisos e sintaxe dos módulos frontend passaram.
-- Suíte completa: 71 testes em 19 arquivos, com `npm test -- --maxWorkers=2 --minWorkers=1 --testTimeout=15000`.
-- Após a revisão final da validação de JSON, nove testes direcionados do adaptador e da projeção passaram.
+- Suíte completa após Browser QA: 79 testes em 21 arquivos, com `npm test -- --maxWorkers=2 --minWorkers=1 --testTimeout=15000`; dois testes adicionais de contratos HTTP passaram em execução direcionada. Total atual: 81 testes em 22 arquivos.
+- Build/typecheck, lint sem avisos, sintaxe frontend, smoke da interface e dez cenários reais de Chrome/Edge passaram; nenhuma requisição chegou à origem bloqueada.
 
 Testes do adaptador simulam GitHub na fronteira de processos. Cobrem URLs de remote, credenciais embutidas, reuso de PR, fork diferente, corpo com quebras de linha, autenticação, push recusado, resposta incerta de criação, CI pendente/falho/ignorado/ausente/indisponível, links inseguros e mudança de commit durante consulta. Integração com Git e EventStore cobre worktree revisado, snapshot persistido, bloqueio manual, aprovação assistida, projeto ocupado e erro 409 após alterações.
 
 O smoke `scripts/phase6-ui-check.mjs` carrega os assets reais em Electron oculto com API GitHub simulada: prévia, edição de título/descrição, publicação, CI, mismatch de commit, login ausente, escaping, modo manual, PT/EN, claro/escuro e larguras 320/768/1440. Capturas em `.claudex/qa/phase6/`. Nenhum PR externo foi criado nesses testes.
 
-Na máquina de desenvolvimento, `gh auth status` retornou **sem login**, inclusive fora do ambiente restrito. A validação com um PR real e CI remoto fica pendente de `gh auth login`. O aplicativo já apresenta essa condição na prévia. A pipeline existente continua fazendo typecheck, lint, build e testes no GitHub Actions.
+O login no GitHub foi concluído e o acesso autenticado ao repositório `DiegoHerreraDaSilva/claudex` foi confirmado. A validação de publicação e CI remoto será registrada após executar o adaptador com o commit final.
 
-A fase 6 ainda não é marcada como concluída: falta a decisão e a implementação do Browser QA para aplicações das missões, além da validação autenticada com GitHub real.
+## Browser QA
+
+No Mission Center, **testar no navegador** abre um formulário com URL local e seleção Google Chrome/Microsoft Edge. O usuário inicia o servidor da aplicação da missão pelo terminal; esta ferramenta não inicia servidores automaticamente. Aceita apenas HTTP(S) em `localhost`, `127.0.0.1` ou `[::1]`, sem credenciais na URL.
+
+É uma verificação de carregamento: abre uma página em perfil isolado com viewport 1440×900, aguarda o carregamento e uma janela de observação de um segundo, registra erros de console/JavaScript, requisições falhas, HTTP ≥400, página vazia e diálogos inesperados. Captura a viewport em PNG. Não verifica cliques, fluxos completos, acessibilidade, responsividade ou erros que surjam após a janela de observação. Ver [navegadores Chrome/Edge suportados pelo Playwright](https://playwright.dev/docs/browsers#google-chrome--microsoft-edge).
+
+Requisições HTTP e WebSocket ficam limitadas à origem escolhida; recursos inline data/blob são permitidos. Service workers e downloads são bloqueados. Redirecionamentos HTTP são bloqueados antes de segui-los, mesmo locais: informe a URL final da aplicação. Recursos de CDN/outra porta produzem falha explícita, sem autorização automática de acesso externo. Popups são fechados. Há limite de 80 mensagens de 1.500 caracteres, timeout de lançamento de 15 segundos e prazo de execução de 30 segundos depois do lançamento. O navegador sempre é fechado ao concluir.
+
+Manual bloqueia o teste; assistido/autônomo permitem a ação `tests` para esta verificação local isolada. A operação mantém o bloqueio do projeto. Exige missão pronta ou com falha, worktree gerenciado limpo, branch correspondente e HEAD igual ao informado. Repete essas validações após autorização e após o teste; mudanças invalidam o resultado. URL e página são informadas pelo usuário: o resultado não prova que o servidor foi iniciado com o código daquele worktree.
+
+Eventos `browser:checked` persistem uma verificação `browser`, com commit, duração, saída e URL da captura. Uma repetição substitui o resultado anterior; uma nova execução da missão limpa as verificações. O estado do ciclo de implementação permanece separado desse check posterior. Aplicar alterações e preparar/publicar PR ficam bloqueados quando alguma verificação falha ou está em andamento. Uma repetição bem-sucedida libera esse bloqueio, desde que as demais verificações e a revisão continuem aprovadas.
+
+- `POST /api/missions/:id/browser-qa`: `{ url, channel: "chrome" | "msedge", expectedHead }`; retorna a verificação. Falta de navegador/servidor vira resultado falho, não sucesso ou skip.
+- `GET /api/missions/:id/browser-qa/:runId/screenshot`: PNG do resultado atual daquela missão; 404 para resultado antigo, inexistente ou identificador inválido. Origem/host loopback seguem a proteção das demais rotas.
+- Capturas persistem em `<dataDir>/browser-qa/<runId>/page.png`, fora do worktree. Não há exclusão automática das capturas antigas nesta entrega.
+
+Testes específicos cobrem URLs, isolamento, bloqueio manual, commit divergente, worktree sujo, mudança durante o teste, persistência/substituição e erro de navegador. `scripts/browser-qa-check.mjs` usa Chrome e Edge reais contra fixtures locais, cobrindo página válida, JavaScript com erro, HTTP 500, recurso de outra origem e redirecionamento; confirma que a origem bloqueada não recebe requisição. Relatório e capturas em `.claudex/qa/browser/`. O smoke da interface também cobre o formulário, envio do commit, seleção do Edge, captura, escaping e bloqueio manual.

@@ -103,6 +103,15 @@ export function projectMissionEvent(
       summary.additions = Number(payload.additions ?? 0);
       summary.deletions = Number(payload.deletions ?? 0);
       break;
+    case "browser:checked": {
+      const verification = payload.verification as VerificationRun | undefined;
+      if (verification)
+        summary.verification = [
+          ...summary.verification.filter((run) => run.kind !== "browser"),
+          verification,
+        ];
+      break;
+    }
     case "verification:started":
     case "verification:completed": {
       summary.status = "verifying";
