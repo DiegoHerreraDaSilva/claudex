@@ -9,49 +9,50 @@
   <body>
     <div id="app">
       <aside id="sidebar">
-        <div class="brand">
-          <span class="dot live"></span>
-          <span>Claudex</span>
+        <div class="brand" id="brand-home" title="home">
+          <span class="brand-mark">C</span>
+          <span class="brand-text">
+            <span class="brand-name">Claudex</span>
+            <span class="brand-tag" data-i18n="brandTag">control center</span>
+          </span>
         </div>
         <button id="new-project-btn" class="new-btn" data-i18n="newProject">+ novo projeto</button>
-        <div id="project-list" class="project-list"></div>
+        <div id="sidebar-nav" class="sidebar-nav"></div>
         <div class="sidebar-foot">
-          <span id="cred-summary" class="muted"></span>
+          <div class="foot-row">
+            <button id="theme-toggle" class="foot-btn" title="tema / theme">light</button>
+            <button id="lang-toggle" class="foot-btn" title="idioma / language">EN</button>
+            <button id="palette-btn" class="foot-btn" title="Ctrl+K">⌘K</button>
+            <button id="settings-btn" class="foot-btn" data-i18n="settings">configurações</button>
+          </div>
+          <span id="cred-summary" class="muted cred-summary"></span>
         </div>
       </aside>
 
+      <div id="divider-left" class="divider" role="separator" aria-orientation="vertical"></div>
+
       <main id="center">
-        <header id="chat-header">
-          <div class="proj-info">
-            <div id="proj-name" class="proj-name" data-i18n="noProject">nenhum projeto</div>
-            <div id="proj-meta" class="proj-meta"></div>
-          </div>
-          <div class="header-actions">
-            <button id="stop-btn" class="ghost-btn" data-i18n="stop" disabled>parar</button>
-            <button id="apply-btn" class="ghost-btn" data-i18n="apply" disabled>aplicar</button>
-            <button id="discard-btn" class="ghost-btn" data-i18n="discard" disabled>descartar</button>
-            <button id="lang-toggle" class="ghost-btn" title="idioma / language">EN</button>
-            <button id="theme-toggle" class="ghost-btn" title="tema / theme">light</button>
-            <button id="settings-btn" class="ghost-btn" data-i18n="settings">configurações<span id="settings-dot" class="cred-dot"></span></button>
-          </div>
-        </header>
-
-        <div id="transcript" class="transcript"></div>
-
-        <form id="composer">
-          <textarea id="composer-input" rows="1" data-i18n-ph="composerPlaceholder" placeholder="descreva a tarefa para os agentes..."></textarea>
-          <button id="send-btn" type="submit" data-i18n="send">enviar</button>
-        </form>
+        <div id="view-host" class="view-host"></div>
       </main>
 
+      <div id="divider-right" class="divider" role="separator" aria-orientation="vertical"></div>
+
       <aside id="right">
-        <div class="tabs">
+        <div class="inspector-head">
+          <span class="inspector-title" data-i18n="inspector">inspector</span>
+          <span id="inspector-branch" class="inspector-branch"></span>
+        </div>
+        <div class="tabs" id="inspector-tabs">
           <button class="tab active" data-tab="diff" data-i18n="tabDiff">diff</button>
+          <button class="tab" data-tab="files" data-i18n="tabFiles">arquivos</button>
           <button class="tab" data-tab="session" data-i18n="tabSession">sessão</button>
         </div>
         <section id="tab-diff" class="tab-panel active">
           <div id="diff-files" class="diff-files"></div>
           <pre id="diff-view" class="diff"></pre>
+        </section>
+        <section id="tab-files" class="tab-panel">
+          <div id="files-list" class="files-list"></div>
         </section>
         <section id="tab-session" class="tab-panel"></section>
       </aside>
@@ -183,6 +184,15 @@
       </div>
     </div>
 
-    <script src="/app.js"></script>
+    <div id="palette" class="palette hidden">
+      <div class="palette-card">
+        <input id="palette-input" class="palette-input" type="text" spellcheck="false" data-i18n-ph="palettePlaceholder" placeholder="digite um comando..." autocomplete="off" />
+        <div id="palette-list" class="palette-list"></div>
+      </div>
+    </div>
+
+    <div id="toasts" class="toasts"></div>
+
+    <script type="module" src="/app.js"></script>
   </body>
 </html>

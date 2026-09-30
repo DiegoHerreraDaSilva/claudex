@@ -1,984 +1,263 @@
-const I18N = {
-  pt: {
-    newProject: "+ novo projeto",
-    newConversation: "+ nova conversa",
-    noProject: "nenhum projeto",
-    stop: "parar",
-    apply: "aplicar",
-    discard: "descartar",
-    settings: "configurações",
-    send: "enviar",
-    composerPlaceholder: "descreva a tarefa para os agentes...",
-    tabDiff: "diff",
-    tabSession: "sessão",
-    newProjectTitle: "novo projeto",
-    close: "fechar",
-    name: "nome",
-    folderLabel: "pasta do projeto (repositório git)",
-    chooseFolder: "escolher pasta",
-    createProject: "criar projeto",
-    chooseFolderTitle: "escolher pasta",
-    up: "subir",
-    selectFolder: "selecionar esta pasta",
-    settingsTitle: "contas e chaves",
-    connectSub: "conectar (assinatura)",
-    connectChatgpt: "conectar (ChatGPT)",
-    disconnect: "desconectar",
-    clearAnthropic: "usar a assinatura",
-    clearOpenai: "usar o login ChatGPT",
-    codexModel: "modelo forte do Codex",
-    authLog: "log de autenticação",
-    save: "salvar",
-    typesafePh: "cole a chave de console.typesafe.ai/keys",
-    emptyNoProjects: "nenhum projeto ainda",
-    emptySelect: "crie ou selecione um projeto para começar.",
-    emptyDescribe: "descreva uma tarefa para os agentes começarem.",
-    thinking: "pensando ",
-    noDiff: "sem alterações pendentes",
-    noSession: "sem projeto",
-    gitValid: "repositório git válido",
-    gitInvalid: "não é um repositório git (rode git init)",
-    validateFail: "não foi possível validar",
-    needFolder: "escolha a pasta do projeto",
-    createError: "erro ao criar",
-    browserLoading: "carregando...",
-    browserEmpty: "nenhuma subpasta",
-    browserNoAccess: "sem acesso: ",
-    saved: "salvo em .env e aplicado",
-    saveError: "erro ao salvar",
-    noConnection: "sem conexão com o servidor",
-    roleUser: "você",
-    roleAssistant: "agente",
-    roleTool: "tool",
-    roleResult: "resultado",
-    roleRouting: "roteamento",
-    roleError: "erro",
-    roleSystem: "sistema",
-    deleteProject: "excluir projeto",
-    deleteConversation: "excluir conversa",
-    renameConversation: "renomear",
-    confirmDeleteProject: "Excluir este projeto do Claudex? A pasta no disco NÃO será apagada.",
-    confirmDeleteConversation: "Excluir esta conversa e sua branch/worktree?",
-    conversations: "conversas",
-    currentConversation: "conversa",
-    usage: "uso dos planos",
-    refresh: "atualizar",
-    tokensLabel: "tokens (Claude + Codex)",
-    planLabel: "plano",
-    appUpdates: "atualizações",
-    checkUpdates: "verificar atualizações",
-    updateChecking: "verificando...",
-    updateAvailable: "versão {version} disponível — baixando",
-    updateNone: "você está na versão mais recente",
-    updateDownloaded: "versão {version} baixada — reinicie para aplicar",
-    updateError: "erro ao verificar",
-    updateDev: "disponível só no app instalado",
-    sectionAccounts: "contas",
-    execution: "execução",
-    unavailable: "indisponível",
-  },
-  en: {
-    newProject: "+ new project",
-    newConversation: "+ new conversation",
-    noProject: "no project",
-    stop: "stop",
-    apply: "apply",
-    discard: "discard",
-    settings: "settings",
-    send: "send",
-    composerPlaceholder: "describe the task for the agents...",
-    tabDiff: "diff",
-    tabSession: "session",
-    newProjectTitle: "new project",
-    close: "close",
-    name: "name",
-    folderLabel: "project folder (git repository)",
-    chooseFolder: "choose folder",
-    createProject: "create project",
-    chooseFolderTitle: "choose folder",
-    up: "up",
-    selectFolder: "select this folder",
-    settingsTitle: "accounts & keys",
-    connectSub: "connect (subscription)",
-    connectChatgpt: "connect (ChatGPT)",
-    disconnect: "disconnect",
-    clearAnthropic: "use the subscription",
-    clearOpenai: "use the ChatGPT login",
-    codexModel: "Codex strong model",
-    authLog: "auth log",
-    save: "save",
-    typesafePh: "paste the key from console.typesafe.ai/keys",
-    emptyNoProjects: "no projects yet",
-    emptySelect: "create or select a project to start.",
-    emptyDescribe: "describe a task for the agents to begin.",
-    thinking: "thinking ",
-    noDiff: "no pending changes",
-    noSession: "no project",
-    gitValid: "valid git repository",
-    gitInvalid: "not a git repository (run git init)",
-    validateFail: "could not validate",
-    needFolder: "choose the project folder",
-    createError: "failed to create",
-    browserLoading: "loading...",
-    browserEmpty: "no subfolders",
-    browserNoAccess: "no access: ",
-    saved: "saved to .env and applied",
-    saveError: "failed to save",
-    noConnection: "no connection to the server",
-    roleUser: "you",
-    roleAssistant: "agent",
-    roleTool: "tool",
-    roleResult: "result",
-    roleRouting: "routing",
-    roleError: "error",
-    roleSystem: "system",
-    deleteProject: "delete project",
-    deleteConversation: "delete conversation",
-    renameConversation: "rename",
-    confirmDeleteProject: "Delete this project from Claudex? The folder on disk will NOT be deleted.",
-    confirmDeleteConversation: "Delete this conversation and its branch/worktree?",
-    conversations: "conversations",
-    currentConversation: "conversation",
-    usage: "plan usage",
-    refresh: "refresh",
-    tokensLabel: "tokens (Claude + Codex)",
-    planLabel: "plan",
-    appUpdates: "updates",
-    checkUpdates: "check for updates",
-    updateChecking: "checking...",
-    updateAvailable: "version {version} available — downloading",
-    updateNone: "you are on the latest version",
-    updateDownloaded: "version {version} downloaded — restart to apply",
-    updateError: "check failed",
-    updateDev: "packaged app only",
-    sectionAccounts: "accounts",
-    execution: "execution",
-    unavailable: "unavailable",
-  },
+import * as api from "./lib/api.js";
+import { applyStatic, getLang, initLang, setLang, t, THEME_KEY } from "./lib/i18n.js";
+import { initSocket, isConnected, send as socketSend } from "./lib/socket.js";
+import { currentConversation, currentProject, notify, patch, state, subscribe } from "./lib/store.js";
+import { initPalette, openPalette, paletteOpen, closePalette } from "./components/commandPalette.js";
+import { toast } from "./components/toast.js";
+import { initModals } from "./views/modals.js";
+import { renderHome } from "./views/home.js";
+import { renderInspector } from "./views/inspector.js";
+import { renderPlaceholder } from "./views/placeholder.js";
+import { renderSidebar } from "./views/sidebar.js";
+import { renderWorkspace } from "./views/workspace.js";
+
+const sidebarRoot = document.getElementById("sidebar-nav");
+const viewHost = document.getElementById("view-host");
+let modals;
+
+const actions = {
+  selectProject,
+  openWorkspace,
+  selectConversation,
+  newConversation,
+  renameConversation,
+  deleteConversation,
+  deleteProject,
+  setView,
+  openSettings: () => modals?.openSettings(),
+  startMission,
+  send,
+  stop,
+  chatAction,
+  comingSoon,
+  reloadProjects: loadProjects,
 };
 
-const THEME_KEY = "claudex-theme";
-const LANG_KEY = "claudex-lang";
-
-const state = {
-  projects: [],
-  currentProjectId: null,
-  currentConversationId: null,
-  snapshot: null,
-  running: new Set(),
-  credentials: null,
-  autoscroll: true,
-  browserPath: "",
-  browserParent: null,
-};
-
-const els = {
-  projectList: document.getElementById("project-list"),
-  newProjectBtn: document.getElementById("new-project-btn"),
-  credSummary: document.getElementById("cred-summary"),
-  projName: document.getElementById("proj-name"),
-  projMeta: document.getElementById("proj-meta"),
-  stopBtn: document.getElementById("stop-btn"),
-  applyBtn: document.getElementById("apply-btn"),
-  discardBtn: document.getElementById("discard-btn"),
-  langToggle: document.getElementById("lang-toggle"),
-  themeToggle: document.getElementById("theme-toggle"),
-  settingsBtn: document.getElementById("settings-btn"),
-  settingsDot: document.getElementById("settings-dot"),
-  transcript: document.getElementById("transcript"),
-  composer: document.getElementById("composer"),
-  input: document.getElementById("composer-input"),
-  sendBtn: document.getElementById("send-btn"),
-  diffFiles: document.getElementById("diff-files"),
-  diffView: document.getElementById("diff-view"),
-  tabSession: document.getElementById("tab-session"),
-  modal: document.getElementById("modal"),
-  modalClose: document.getElementById("modal-close"),
-  npName: document.getElementById("np-name"),
-  npPath: document.getElementById("np-path"),
-  npBrowse: document.getElementById("np-browse"),
-  npCreate: document.getElementById("np-create"),
-  npStatus: document.getElementById("np-status"),
-  browserModal: document.getElementById("browser-modal"),
-  browserClose: document.getElementById("browser-close"),
-  browserPath: document.getElementById("browser-path"),
-  browserList: document.getElementById("browser-list"),
-  browserUp: document.getElementById("browser-up"),
-  browserSelect: document.getElementById("browser-select"),
-  settingsModal: document.getElementById("settings-modal"),
-  settingsClose: document.getElementById("settings-close"),
-  settingsSave: document.getElementById("settings-save"),
-  settingsMsg: document.getElementById("settings-msg"),
-  credStatus: document.getElementById("cred-status"),
-  usageStatus: document.getElementById("usage-status"),
-  usageRefresh: document.getElementById("usage-refresh"),
-  updateField: document.getElementById("update-field"),
-  checkUpdates: document.getElementById("check-updates"),
-  updateStatus: document.getElementById("update-status"),
-  tsHint: document.getElementById("ts-hint"),
-  claudeMode: document.getElementById("claude-mode"),
-  claudeAccount: document.getElementById("claude-account"),
-  codexMode: document.getElementById("codex-mode"),
-  codexAccount: document.getElementById("codex-account"),
-  inputTypesafe: document.getElementById("input-typesafe"),
-  inputAnthropic: document.getElementById("input-anthropic"),
-  inputOpenai: document.getElementById("input-openai"),
-  inputComplexModel: document.getElementById("input-complex-model"),
-  clearAnthropic: document.getElementById("clear-anthropic"),
-  clearOpenai: document.getElementById("clear-openai"),
-  accountLog: document.getElementById("account-log"),
-};
-
-let socket = null;
-let lang = "pt";
-
-function t(key, params) {
-  const dict = I18N[lang] ?? I18N.en;
-  let value = dict[key] ?? I18N.en[key] ?? key;
-  if (params) for (const [k, v] of Object.entries(params)) value = value.split(`{${k}}`).join(String(v));
-  return value;
+function renderAll() {
+  renderSidebar(sidebarRoot, actions);
+  renderView();
+  renderInspector();
 }
 
-function applyStatic() {
-  document.documentElement.lang = lang === "pt" ? "pt-BR" : "en";
-  document.querySelectorAll("[data-i18n]").forEach((el) => {
-    el.textContent = t(el.dataset.i18n);
-  });
-  document.querySelectorAll("[data-i18n-ph]").forEach((el) => {
-    el.placeholder = t(el.dataset.i18nPh);
-  });
-  els.langToggle.textContent = lang === "pt" ? "EN" : "PT";
-}
-
-function setLang(next) {
-  lang = next === "en" ? "en" : "pt";
-  localStorage.setItem(LANG_KEY, lang);
-  applyStatic();
-  render();
-}
-
-function applyTheme(theme) {
-  document.documentElement.setAttribute("data-theme", theme);
-  els.themeToggle.textContent = theme === "dark" ? "light" : "dark";
-}
-
-function initTheme() {
-  const saved = localStorage.getItem(THEME_KEY);
-  const prefersLight = window.matchMedia("(prefers-color-scheme: light)").matches;
-  applyTheme(saved || (prefersLight ? "light" : "dark"));
-}
-
-function currentProject() {
-  return state.projects.find((p) => p.id === state.currentProjectId) || null;
-}
-
-function currentConversation() {
-  return currentProject()?.conversations?.find((c) => c.id === state.currentConversationId) || null;
-}
-
-function conversationMessages() {
-  const conv = state.snapshot?.project?.conversations?.find((c) => c.id === state.currentConversationId);
-  return conv?.messages ?? [];
-}
-
-function renderSidebar() {
-  els.projectList.replaceChildren();
-  if (state.projects.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "empty";
-    empty.textContent = t("emptyNoProjects");
-    els.projectList.appendChild(empty);
-    return;
+function renderView() {
+  switch (state.view) {
+    case "home":
+      renderHome(viewHost, actions);
+      break;
+    case "workspace":
+      renderWorkspace(viewHost, actions);
+      break;
+    case "missions":
+      renderPlaceholder(viewHost, "missionsTitle");
+      break;
+    case "worktrees":
+      renderPlaceholder(viewHost, "worktreesTitle");
+      break;
+    case "memory":
+      renderPlaceholder(viewHost, "memoryTitle");
+      break;
+    case "history":
+      renderPlaceholder(viewHost, "historyTitle");
+      break;
+    case "agents":
+      renderPlaceholder(viewHost, "agentsTitle");
+      break;
+    case "tasks":
+      renderPlaceholder(viewHost, "tasksTitle");
+      break;
+    case "schedules":
+      renderPlaceholder(viewHost, "schedulesTitle");
+      break;
+    default:
+      renderHome(viewHost, actions);
   }
-  for (const project of state.projects) {
-    const item = document.createElement("div");
-    item.className = "project" + (project.id === state.currentProjectId ? " selected" : "");
-
-    const head = document.createElement("div");
-    head.className = "project-head";
-    const dot = document.createElement("span");
-    dot.className = "dot " + (project.running ? "running" : "");
-    const name = document.createElement("span");
-    name.className = "project-name";
-    name.textContent = project.name;
-    const del = document.createElement("button");
-    del.className = "icon-btn";
-    del.title = t("deleteProject");
-    del.textContent = "×";
-    del.onclick = (e) => {
-      e.stopPropagation();
-      deleteProject(project.id);
-    };
-    head.append(dot, name, del);
-
-    const pathEl = document.createElement("div");
-    pathEl.className = "project-path";
-    pathEl.textContent = project.rootPath;
-    item.append(head, pathEl);
-
-    const header = item.querySelector(".project-head");
-    header.onclick = () => selectProject(project.id);
-
-    if (project.id === state.currentProjectId) {
-      const list = document.createElement("div");
-      list.className = "conversation-list";
-      for (const conversation of project.conversations ?? []) {
-        const row = document.createElement("div");
-        row.className = "conversation" + (conversation.id === state.currentConversationId ? " selected" : "");
-        const cdot = document.createElement("span");
-        cdot.className = "dot " + (conversation.running ? "running" : "");
-        const cname = document.createElement("span");
-        cname.className = "conversation-name";
-        cname.textContent = conversation.name;
-        const ren = document.createElement("button");
-        ren.className = "icon-btn";
-        ren.title = t("renameConversation");
-        ren.textContent = "✎";
-        ren.onclick = (e) => {
-          e.stopPropagation();
-          renameConversation(project.id, conversation.id, conversation.name);
-        };
-        const cdel = document.createElement("button");
-        cdel.className = "icon-btn";
-        cdel.title = t("deleteConversation");
-        cdel.textContent = "×";
-        cdel.onclick = (e) => {
-          e.stopPropagation();
-          deleteConversation(project.id, conversation.id);
-        };
-        row.append(cdot, cname, ren, cdel);
-        row.onclick = () => selectConversation(conversation.id);
-        list.appendChild(row);
-      }
-      const add = document.createElement("button");
-      add.className = "new-conv";
-      add.textContent = t("newConversation");
-      add.onclick = (e) => {
-        e.stopPropagation();
-        socket?.send(JSON.stringify({ type: "conversation:create", projectId: project.id }));
-      };
-      list.appendChild(add);
-      item.appendChild(list);
-    }
-
-    els.projectList.appendChild(item);
-  }
-}
-
-function renderHeader() {
-  const project = currentProject();
-  const conversation = currentConversation();
-  if (!project || !conversation) {
-    els.projName.textContent = t("noProject");
-    els.projMeta.textContent = "";
-    els.stopBtn.disabled = true;
-    els.applyBtn.disabled = true;
-    els.discardBtn.disabled = true;
-    return;
-  }
-  els.projName.textContent = `${project.name}  ·  ${conversation.name}`;
-  const bits = [project.rootPath];
-  if (project.baseBranch) bits.push(`base: ${project.baseBranch}`);
-  if (conversation.branch) bits.push(`branch: ${conversation.branch}`);
-  if (conversation.activeAgent) bits.push(conversation.activeAgent);
-  els.projMeta.textContent = bits.join("  •  ");
-
-  const running = state.running.has(conversation.id);
-  const diff = state.snapshot?.diffs?.[conversation.id];
-  const files = diff?.files ?? [];
-  els.stopBtn.disabled = !running;
-  const canAct = files.length > 0 && !running;
-  els.applyBtn.disabled = !canAct;
-  els.discardBtn.disabled = !canAct;
-}
-
-function roleLabel(role) {
-  const map = {
-    user: "roleUser",
-    assistant: "roleAssistant",
-    tool: "roleTool",
-    result: "roleResult",
-    routing: "roleRouting",
-    error: "roleError",
-    system: "roleSystem",
-  };
-  return t(map[role] ?? "roleSystem");
-}
-
-function renderTranscript() {
-  els.transcript.replaceChildren();
-  const project = currentProject();
-  const conversation = currentConversation();
-  if (!project || !conversation) {
-    const empty = document.createElement("div");
-    empty.className = "empty";
-    empty.textContent = t("emptySelect");
-    els.transcript.appendChild(empty);
-    return;
-  }
-  const messages = conversationMessages();
-  if (messages.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "empty";
-    empty.textContent = t("emptyDescribe");
-    els.transcript.appendChild(empty);
-  }
-  for (const message of messages) {
-    const el = document.createElement("div");
-    el.className = `msg ${message.role}`;
-    const who = document.createElement("div");
-    who.className = "who";
-    who.textContent = roleLabel(message.role);
-    const bubble = document.createElement("div");
-    bubble.className = "bubble";
-    const text = message.code ? t(message.code) : message.text;
-    bubble.textContent = message.meta ? `${text}\n${message.meta}` : text;
-    el.append(who, bubble);
-    els.transcript.appendChild(el);
-  }
-  if (state.running.has(conversation.id)) {
-    const typing = document.createElement("div");
-    typing.className = "msg assistant typing";
-    const bubble = document.createElement("div");
-    bubble.className = "bubble";
-    bubble.textContent = t("thinking");
-    typing.appendChild(bubble);
-    els.transcript.appendChild(typing);
-  }
-  if (state.autoscroll) els.transcript.scrollTop = els.transcript.scrollHeight;
-}
-
-function renderDiff() {
-  const diff = state.snapshot?.diffs?.[state.currentConversationId];
-  els.diffFiles.replaceChildren();
-  for (const file of diff?.files ?? []) {
-    const chip = document.createElement("span");
-    chip.className = "file-chip";
-    chip.textContent = file;
-    els.diffFiles.appendChild(chip);
-  }
-  if (!diff?.diff) {
-    els.diffView.innerHTML = `<span class="empty">${t("noDiff")}</span>`;
-    return;
-  }
-  els.diffView.replaceChildren();
-  const frag = document.createDocumentFragment();
-  for (const line of diff.diff.split("\n")) {
-    const span = document.createElement("span");
-    if (line.startsWith("+") && !line.startsWith("+++")) span.className = "add";
-    else if (line.startsWith("-") && !line.startsWith("---")) span.className = "del";
-    span.textContent = line + "\n";
-    frag.appendChild(span);
-  }
-  els.diffView.appendChild(frag);
-}
-
-function renderSession() {
-  const project = currentProject();
-  const conversation = currentConversation();
-  if (!project || !conversation) {
-    els.tabSession.innerHTML = `<span class="empty">${t("noSession")}</span>`;
-    return;
-  }
-  const full = state.snapshot?.project?.conversations?.find((c) => c.id === conversation.id);
-  const rows = [
-    ["projeto", project.name],
-    ["pasta", project.rootPath],
-    [t("currentConversation"), conversation.name],
-    ["branch", full?.branch || "—"],
-    ["base", project.baseBranch || "—"],
-    ["agente", full?.activeAgent || "—"],
-    ["claude session", full?.claudeSessionId || "—"],
-    ["codex thread", full?.codexThreadId || "—"],
-    ["mensagens", String((full?.messages ?? []).length)],
-  ];
-  els.tabSession.replaceChildren();
-  for (const [k, v] of rows) {
-    const card = document.createElement("div");
-    card.className = "session-card";
-    const kEl = document.createElement("div");
-    kEl.className = "k";
-    kEl.textContent = k;
-    const vEl = document.createElement("div");
-    vEl.className = "v";
-    vEl.textContent = v;
-    card.append(kEl, vEl);
-    els.tabSession.appendChild(card);
-  }
-}
-
-function render() {
-  renderSidebar();
-  renderHeader();
-  renderTranscript();
-  renderDiff();
-  renderSession();
 }
 
 async function loadProjects() {
   try {
-    const res = await fetch("/api/projects");
-    state.projects = await res.json();
+    patch({ projects: await api.getProjects() });
   } catch {
-    state.projects = [];
+    patch({ projects: [] });
   }
-  if (!state.currentProjectId && state.projects.length > 0) {
-    await selectProject(state.projects[0].id);
-  } else {
-    renderSidebar();
+}
+
+async function loadSnapshot(projectId) {
+  try {
+    const snapshot = await api.getProject(projectId);
+    if (!snapshot || state.currentProjectId !== projectId) return;
+    state.running = new Set(snapshot.running ?? []);
+    patch({ snapshot });
+  } catch {
+    /* ignore */
   }
 }
 
 async function selectProject(projectId) {
-  state.currentProjectId = projectId;
-  state.snapshot = null;
-  const project = state.projects.find((p) => p.id === projectId);
-  state.currentConversationId = project?.activeConversationId ?? project?.conversations?.[0]?.id ?? null;
-  render();
-  try {
-    const res = await fetch(`/api/projects/${projectId}`);
-    if (!res.ok) return;
-    const snap = await res.json();
-    if (state.currentProjectId !== projectId) return;
-    state.snapshot = snap;
-    state.running = new Set(snap.running ?? []);
-    if (!state.currentConversationId) {
-      state.currentConversationId = snap.project?.activeConversationId ?? snap.project?.conversations?.[0]?.id ?? null;
-    }
-    render();
-  } catch {
-    /* ignore */
-  }
+  const project = state.projects.find((item) => item.id === projectId);
+  patch({
+    currentProjectId: projectId,
+    currentConversationId:
+      project?.activeConversationId ?? project?.conversations?.[0]?.id ?? null,
+    view: "workspace",
+    snapshot: null,
+  });
+  await loadSnapshot(projectId);
+}
+
+async function openWorkspace(projectId, conversationId) {
+  patch({
+    currentProjectId: projectId,
+    currentConversationId: conversationId ?? null,
+    view: "workspace",
+    snapshot: null,
+  });
+  await loadSnapshot(projectId);
 }
 
 function selectConversation(conversationId) {
-  state.currentConversationId = conversationId;
-  render();
+  patch({ currentConversationId: conversationId, view: "workspace" });
 }
 
-function loadCredentials() {
-  fetch("/api/credentials")
-    .then((r) => r.json())
-    .then((cred) => {
-      state.credentials = cred;
-      renderCredentials();
-    })
-    .catch(() => undefined);
+function newConversation() {
+  const project = currentProject();
+  if (!project) return;
+  socketSend({ type: "conversation:create", projectId: project.id });
 }
 
-function renderCredentials() {
-  const cred = state.credentials;
-  if (!cred) return;
-  els.credSummary.textContent = `claude: ${cred.claude?.mode ?? "?"}  ·  codex: ${cred.codex?.mode ?? "?"}  ·  jev: ${cred.typesafe?.configured ? "ok" : "off"}`;
-  if (els.tsHint) els.tsHint.textContent = cred.typesafe?.configured ? `atual: ${cred.typesafe.hint}` : "";
-  if (els.claudeMode) {
-    els.claudeMode.textContent = cred.claude.mode;
-    els.claudeMode.className = `mode-chip ${cred.claude.mode}`;
-  }
-  if (els.claudeAccount) els.claudeAccount.textContent = cred.claude.mode === "subscription" ? cred.claude.detail : "";
-  if (els.codexMode) {
-    els.codexMode.textContent = cred.codex.mode;
-    els.codexMode.className = `mode-chip ${cred.codex.mode}`;
-  }
-  if (els.codexAccount) {
-    els.codexAccount.textContent = [cred.codex.account, cred.codex.plan && `(${cred.codex.plan})`].filter(Boolean).join(" ");
-  }
-  if (els.credStatus) {
-    els.credStatus.innerHTML = [
-      `<div class="cred-line"><span>TypeSafe</span><b>${escapeHtml(cred.typesafe?.configured ? cred.typesafe.hint : "—")}</b></div>`,
-      `<div class="cred-line"><span>Claude</span><b>${escapeHtml(cred.claude.mode)}</b></div>`,
-      `<div class="cred-line"><span>Codex</span><b>${escapeHtml(cred.codex.mode)}</b></div>`,
-    ].join("");
-  }
-  const warn = !cred.typesafe?.configured || cred.claude.mode === "none" || cred.codex.mode === "none";
-  if (els.settingsDot) els.settingsDot.className = `cred-dot ${warn ? "warn" : "ok"}`;
-  if (els.inputComplexModel && !els.inputComplexModel.value) els.inputComplexModel.value = cred.complexModel || "";
+function renameConversation(conversationId, current) {
+  const project = currentProject();
+  if (!project) return;
+  const name = window.prompt(t("renameConversation"), current);
+  if (!name) return;
+  socketSend({ type: "conversation:rename", projectId: project.id, conversationId, name });
 }
 
-async function loadUsage() {
-  const box = els.usageStatus;
-  if (!box) return;
-  box.innerHTML = '<span class="empty">…</span>';
-  try {
-    const res = await fetch("/api/usage");
-    renderUsage(await res.json());
-  } catch {
-    box.innerHTML = '<span class="empty">—</span>';
-  }
-}
-
-function usageBar(label, pct) {
-  const value = typeof pct === "number" ? Math.max(0, Math.min(100, pct)) : 0;
-  const text = typeof pct === "number" ? `${pct.toFixed(0)}%` : "—";
-  return `<div class="usage-row"><span>${escapeHtml(label)}</span><b>${text}</b></div><div class="bar"><i style="width:${value}%"></i></div>`;
-}
-
-function renderUsage(data) {
-  const c = data.claude;
-  const parts = [];
-  if (c) {
-    parts.push(
-      `<div class="cred-line"><span>Claude ${escapeHtml(c.subscriptionType || "")}</span><b>${escapeHtml(t("planLabel"))}</b></div>`,
-    );
-    parts.push(usageBar("5h", c.fiveHour?.utilization ?? null));
-    parts.push(usageBar("7d", c.sevenDay?.utilization ?? null));
-  } else {
-    parts.push(`<div class="cred-line"><span>Claude</span><b>${escapeHtml(t("unavailable"))}</b></div>`);
-  }
-  const codex = data.codex || {};
-  parts.push(
-    `<div class="cred-line"><span>Codex ${escapeHtml(codex.account || "")} ${codex.plan ? `(${escapeHtml(codex.plan)})` : ""}</span><b>${escapeHtml(codex.mode || "")}</b></div>`,
-  );
-  const tk = data.tokens || {};
-  parts.push(
-    `<div class="cred-line"><span>${escapeHtml(t("tokensLabel"))}</span><b>${tk.inputTokens ?? 0} in / ${tk.outputTokens ?? 0} out (${tk.runs ?? 0})</b></div>`,
-  );
-  els.usageStatus.innerHTML = parts.join("");
-}
-
-function renderUpdateStatus(data) {
-  if (!data || !els.updateStatus) return;
-  const status = data.status;
-  let text = "";
-  let cls = "settings-msg";
-  if (status === "checking") text = t("updateChecking");
-  else if (status === "available") text = t("updateAvailable", { version: data.version ?? "" });
-  else if (status === "downloading")
-    text = `${t("updateAvailable", { version: data.version ?? "" })} ${data.percent ?? 0}%`;
-  else if (status === "none") {
-    text = t("updateNone");
-    cls = "settings-msg ok";
-  } else if (status === "downloaded") {
-    text = t("updateDownloaded", { version: data.version ?? "" });
-    cls = "settings-msg ok";
-  } else if (status === "error") {
-    text = `${t("updateError")}: ${data.message ?? ""}`;
-    cls = "settings-msg err";
-  } else if (status === "dev") text = t("updateDev");
-  els.updateStatus.textContent = text;
-  els.updateStatus.className = cls;
-}
-
-function setupUpdates() {
-  const field = els.updateField;
-  if (!window.claudexApp?.checkForUpdates || !field) return;
-  field.style.display = "";
-  window.claudexApp.onUpdateStatus((data) => renderUpdateStatus(data));
-  els.checkUpdates.addEventListener("click", async () => {
-    els.updateStatus.textContent = t("updateChecking");
-    els.updateStatus.className = "settings-msg";
-    const result = await window.claudexApp.checkForUpdates();
-    if (result?.status === "dev") renderUpdateStatus({ status: "dev" });
-    else if (result?.status === "error") renderUpdateStatus(result);
-  });
-}
-
-function sendMessage() {
-  const text = els.input.value.trim();
-  if (!text || !state.currentConversationId) return;
-  if (state.running.has(state.currentConversationId)) return;
-  socket?.send(
-    JSON.stringify({
-      type: "chat:send",
-      projectId: state.currentProjectId,
-      conversationId: state.currentConversationId,
-      text,
-    }),
-  );
-  els.input.value = "";
-  autoGrow();
-}
-
-function autoGrow() {
-  els.input.style.height = "auto";
-  els.input.style.height = `${Math.min(els.input.scrollHeight, 180)}px`;
+function deleteConversation(conversationId) {
+  const project = currentProject();
+  if (!project) return;
+  if (!window.confirm(t("confirmDeleteConversation"))) return;
+  socketSend({ type: "conversation:delete", projectId: project.id, conversationId });
 }
 
 function deleteProject(projectId) {
   if (!window.confirm(t("confirmDeleteProject"))) return;
-  socket?.send(JSON.stringify({ type: "project:delete", projectId }));
-}
-function deleteConversation(projectId, conversationId) {
-  if (!window.confirm(t("confirmDeleteConversation"))) return;
-  socket?.send(JSON.stringify({ type: "conversation:delete", projectId, conversationId }));
-}
-function renameConversation(projectId, conversationId, current) {
-  const name = window.prompt(t("renameConversation"), current);
-  if (!name) return;
-  socket?.send(JSON.stringify({ type: "conversation:rename", projectId, conversationId, name }));
+  socketSend({ type: "project:delete", projectId });
 }
 
-function openModal() {
-  els.npName.value = "";
-  els.npPath.value = "";
-  els.npStatus.textContent = "";
-  els.npStatus.className = "np-status";
-  els.modal.classList.remove("hidden");
-}
-function closeModal() {
-  els.modal.classList.add("hidden");
-}
-
-async function browseFolder() {
-  try {
-    if (window.claudexApp?.pickFolder) {
-      const folder = await window.claudexApp.pickFolder();
-      if (folder) applyPickedFolder(folder);
-      return;
-    }
-    openBrowser(els.npPath.value.trim());
-  } catch {
-    /* ignore */
-  }
-}
-
-function applyPickedFolder(folder) {
-  els.npPath.value = folder;
-  if (!els.npName.value) els.npName.value = folder.replace(/[\\/]+$/, "").split(/[\\/]/).pop();
-  validatePath();
-}
-function openBrowser(startPath) {
-  els.browserModal.classList.remove("hidden");
-  loadBrowser(startPath || "");
-}
-function closeBrowser() {
-  els.browserModal.classList.add("hidden");
-}
-
-async function loadBrowser(target) {
-  els.browserPath.textContent = target || "unidades";
-  els.browserList.replaceChildren();
-  const loading = document.createElement("div");
-  loading.className = "browser-empty";
-  loading.textContent = t("browserLoading");
-  els.browserList.appendChild(loading);
-  state.browserPath = target || "";
-  try {
-    const res = await fetch(`/api/fs/list?path=${encodeURIComponent(target || "")}`);
-    const data = await res.json();
-    state.browserPath = data.path || target || "";
-    state.browserParent = data.parent ?? null;
-    els.browserPath.textContent = data.path || "unidades";
-    els.browserList.replaceChildren();
-    if (data.error) {
-      const err = document.createElement("div");
-      err.className = "browser-empty";
-      err.textContent = `${t("browserNoAccess")}${data.error}`;
-      els.browserList.appendChild(err);
-    }
-    if (data.entries.length === 0 && !data.error) {
-      const empty = document.createElement("div");
-      empty.className = "browser-empty";
-      empty.textContent = t("browserEmpty");
-      els.browserList.appendChild(empty);
-    }
-    for (const entry of data.entries) {
-      const row = document.createElement("div");
-      row.className = "browser-row";
-      row.onclick = () => loadBrowser(entry.path);
-      const ico = document.createElement("span");
-      ico.className = "ico";
-      ico.textContent = "▸";
-      const nm = document.createElement("span");
-      nm.className = "nm";
-      nm.textContent = entry.name;
-      row.append(ico, nm);
-      if (entry.isGitRepo) {
-        const git = document.createElement("span");
-        git.className = "git";
-        git.textContent = "git";
-        row.appendChild(git);
-      }
-      els.browserList.appendChild(row);
-    }
-    els.browserUp.disabled = !data.parent;
-  } catch (err) {
-    els.browserList.replaceChildren();
-    const err2 = document.createElement("div");
-    err2.className = "browser-empty";
-    err2.textContent = String(err);
-    els.browserList.appendChild(err2);
-  }
-}
-
-async function validatePath() {
-  const rootPath = els.npPath.value.trim();
-  if (!rootPath) {
-    els.npStatus.textContent = "";
-    els.npStatus.className = "np-status";
+function setView(name) {
+  if (name === "workspace" && !currentProject()) {
+    toast(t("emptySelect"));
+    patch({ view: "home" });
     return;
   }
-  try {
-    const res = await fetch("/api/validate-path", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rootPath }),
-    });
-    const data = await res.json();
-    els.npStatus.textContent = data.isGitRepo ? t("gitValid") : t("gitInvalid");
-    els.npStatus.className = `np-status ${data.isGitRepo ? "ok" : "err"}`;
-  } catch {
-    els.npStatus.textContent = t("validateFail");
-    els.npStatus.className = "np-status err";
+  patch({ view: name });
+  if (state.currentProjectId && !state.snapshot && name !== "home") {
+    void loadSnapshot(state.currentProjectId);
   }
 }
 
-async function createProject() {
-  const rootPath = els.npPath.value.trim();
-  if (!rootPath) {
-    els.npStatus.textContent = t("needFolder");
-    els.npStatus.className = "np-status err";
+async function startMission(text) {
+  const project = currentProject();
+  if (!project) {
+    toast(t("emptySelect"));
     return;
   }
-  els.npCreate.disabled = true;
-  try {
-    const res = await fetch("/api/projects", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: els.npName.value.trim(), rootPath }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      els.npStatus.textContent = data.error || t("createError");
-      els.npStatus.className = "np-status err";
-      return;
-    }
-    closeModal();
-    await loadProjects();
-    selectProject(data.id);
-  } catch (err) {
-    els.npStatus.textContent = String(err);
-    els.npStatus.className = "np-status err";
-  } finally {
-    els.npCreate.disabled = false;
-  }
-}
-
-function openSettings() {
-  renderCredentials();
-  els.settingsMsg.textContent = "";
-  els.settingsMsg.className = "settings-msg";
-  els.settingsModal.classList.remove("hidden");
-  void loadUsage();
-}
-function closeSettings() {
-  els.settingsModal.classList.add("hidden");
-}
-
-function saveSettings() {
-  const values = {};
-  const typesafe = els.inputTypesafe.value.trim();
-  if (typesafe) values.TYPESAFE_API_KEY = typesafe;
-  if (els.clearAnthropic.checked) values.ANTHROPIC_API_KEY = "";
-  else if (els.inputAnthropic.value.trim()) values.ANTHROPIC_API_KEY = els.inputAnthropic.value.trim();
-  if (els.clearOpenai.checked) values.OPENAI_API_KEY = "";
-  else if (els.inputOpenai.value.trim()) values.OPENAI_API_KEY = els.inputOpenai.value.trim();
-  const model = els.inputComplexModel.value.trim();
-  if (model) values.DEFAULT_COMPLEX_MODEL = model;
-  if (!socket || socket.readyState !== WebSocket.OPEN) {
-    els.settingsMsg.textContent = t("noConnection");
-    els.settingsMsg.className = "settings-msg err";
+  let conversationId = state.currentConversationId ?? project.activeConversationId ?? project.conversations?.[0]?.id;
+  if (!conversationId) {
+    socketSend({ type: "conversation:create", projectId: project.id });
+    toast(t("newConversation"));
     return;
   }
-  socket.send(JSON.stringify({ type: "settings", values }));
+  patch({ view: "workspace", currentConversationId: conversationId });
+  if (!state.snapshot) await loadSnapshot(project.id);
+  send(text);
 }
 
-function onSettingsAck(msg) {
-  if (msg.ok) {
-    els.settingsMsg.textContent = t("saved");
-    els.settingsMsg.className = "settings-msg ok";
-    els.inputTypesafe.value = "";
-    els.inputAnthropic.value = "";
-    els.inputOpenai.value = "";
-    els.clearAnthropic.checked = false;
-    els.clearOpenai.checked = false;
-    if (msg.data) {
-      state.credentials = msg.data;
-      renderCredentials();
-    }
-  } else {
-    els.settingsMsg.textContent = msg.error || t("saveError");
-    els.settingsMsg.className = "settings-msg err";
+function send(text) {
+  const project = currentProject();
+  const conversation = currentConversation();
+  if (!project || !conversation) {
+    toast(t("emptySelect"));
+    return;
   }
-}
-
-function pushAccountLog(cls, text) {
-  const line = document.createElement("div");
-  line.className = cls;
-  line.textContent = text;
-  els.accountLog.appendChild(line);
-  els.accountLog.scrollTop = els.accountLog.scrollHeight;
-}
-function setAccountButtonsBusy(provider, busy) {
-  document.querySelectorAll(`.small-btn[data-provider="${provider}"]`).forEach((btn) => {
-    btn.disabled = busy;
+  if (state.running.has(conversation.id)) return;
+  socketSend({
+    type: "chat:send",
+    projectId: project.id,
+    conversationId: conversation.id,
+    text,
   });
 }
-function runAccountAction(provider, action) {
-  if (!socket || socket.readyState !== WebSocket.OPEN) {
-    pushAccountLog("err", t("noConnection"));
-    return;
-  }
-  setAccountButtonsBusy(provider, true);
-  pushAccountLog("sys", `> ${provider} ${action}...`);
-  socket.send(JSON.stringify({ type: "account", provider, action }));
+
+function stop() {
+  const project = currentProject();
+  const conversation = currentConversation();
+  if (!project || !conversation) return;
+  socketSend({ type: "chat:stop", projectId: project.id, conversationId: conversation.id });
 }
 
-function handleMessage(msg) {
+function chatAction(action) {
+  const project = currentProject();
+  const conversation = currentConversation();
+  if (!project || !conversation) return;
+  socketSend({
+    type: "chat:action",
+    projectId: project.id,
+    conversationId: conversation.id,
+    action,
+  });
+}
+
+function comingSoon() {
+  toast(t("comingSoon"));
+}
+
+function onMessage(msg) {
   switch (msg.type) {
     case "projects": {
-      state.projects = msg.data;
-      const project = currentProject();
-      if (project && !project.conversations.some((c) => c.id === state.currentConversationId)) {
-        state.currentConversationId = project.activeConversationId ?? project.conversations[0]?.id ?? null;
+      const projects = msg.data ?? [];
+      let conversationId = state.currentConversationId;
+      const project = projects.find((item) => item.id === state.currentProjectId);
+      if (project && !project.conversations.some((item) => item.id === conversationId)) {
+        conversationId = project.activeConversationId ?? project.conversations[0]?.id ?? null;
       }
-      renderSidebar();
-      renderHeader();
+      patch({ projects, currentConversationId: conversationId });
       break;
     }
     case "credentials":
-      state.credentials = msg.data;
-      renderCredentials();
+      patch({ credentials: msg.data });
+      modals?.renderCredentials();
       break;
     case "settings:ack":
-      onSettingsAck(msg);
+      modals?.handleSettingsAck(msg);
       break;
     case "account:start":
-      pushAccountLog("sys", `# ${msg.provider} ${msg.action}...`);
+      modals?.onAccountStart(msg);
       break;
     case "account:output":
-      pushAccountLog(msg.stream === "stderr" ? "err" : msg.stream === "status" ? "sys" : "", msg.line);
+      modals?.onAccountOutput(msg);
       break;
     case "account:done":
-      setAccountButtonsBusy(msg.data?.provider, false);
-      pushAccountLog(msg.data?.ok ? "ok" : "err", `${msg.data?.provider} ${msg.data?.action}: ${msg.data?.ok ? "ok" : msg.data?.message}`);
+      modals?.onAccountDone(msg);
       break;
     case "chat:message": {
       if (msg.projectId !== state.currentProjectId || !state.snapshot) break;
-      const conv = state.snapshot.project.conversations.find((c) => c.id === msg.conversationId);
-      if (conv) conv.messages.push(msg.message);
-      if (msg.conversationId === state.currentConversationId) renderTranscript();
+      const conversation = state.snapshot.project.conversations.find((item) => item.id === msg.conversationId);
+      if (conversation) conversation.messages.push(msg.message);
+      notify();
       break;
     }
     case "chat:routing": {
       if (msg.projectId !== state.currentProjectId) break;
-      const conv = state.snapshot?.project?.conversations?.find((c) => c.id === msg.conversationId);
-      if (conv) conv.activeAgent = msg.agent;
-      if (msg.conversationId === state.currentConversationId) renderHeader();
+      const conversation = state.snapshot?.project?.conversations?.find((item) => item.id === msg.conversationId);
+      if (conversation) conversation.activeAgent = msg.agent;
+      notify();
       break;
     }
     case "chat:turn": {
-      if (msg.conversationId === state.currentConversationId) {
-        if (msg.status === "started") state.running.add(msg.conversationId);
-        else state.running.delete(msg.conversationId);
-        renderHeader();
-        renderTranscript();
-      } else if (msg.status === "started") {
-        state.running.add(msg.conversationId);
-      } else {
-        state.running.delete(msg.conversationId);
-      }
-      renderSidebar();
+      if (msg.status === "started") state.running.add(msg.conversationId);
+      else state.running.delete(msg.conversationId);
+      notify();
       break;
     }
     case "chat:diff": {
@@ -990,17 +269,23 @@ function handleMessage(msg) {
         branch: msg.branch,
         baseBranch: msg.baseBranch,
       };
-      if (msg.conversationId === state.currentConversationId) {
-        renderDiff();
-        renderHeader();
-      }
+      notify();
       break;
     }
     case "chat:error": {
       if (msg.projectId !== state.currentProjectId || !state.snapshot) break;
-      const conv = state.snapshot.project.conversations.find((c) => c.id === msg.conversationId);
-      if (conv) conv.messages.push({ id: String(Date.now()), at: Date.now(), role: "error", text: msg.error });
-      if (msg.conversationId === state.currentConversationId) renderTranscript();
+      const conversation = state.snapshot.project.conversations.find((item) => item.id === msg.conversationId);
+      if (conversation) {
+        conversation.messages.push({ id: String(Date.now()), at: Date.now(), role: "error", text: msg.error });
+      }
+      notify();
+      break;
+    }
+    case "mission:event": {
+      const event = msg.event;
+      if (event?.type === "router:decided") {
+        state.route = { stage: event.payload?.route === "plan" ? "plan" : "implement" };
+      }
       break;
     }
     default:
@@ -1008,103 +293,166 @@ function handleMessage(msg) {
   }
 }
 
-function connect() {
-  const proto = location.protocol === "https:" ? "wss" : "ws";
-  socket = new WebSocket(`${proto}://${location.host}`);
-  socket.onmessage = (event) => {
-    try {
-      handleMessage(JSON.parse(event.data));
-    } catch {
-      /* ignore */
-    }
-  };
-  socket.onclose = () => setTimeout(connect, 1500);
+function applyTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  const btn = document.getElementById("theme-toggle");
+  if (btn) btn.textContent = theme === "dark" ? "light" : "dark";
 }
 
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+function initTheme() {
+  let saved;
+  try {
+    saved = localStorage.getItem(THEME_KEY);
+  } catch {
+    saved = null;
+  }
+  const prefersLight = window.matchMedia("(prefers-color-scheme: light)").matches;
+  applyTheme(saved || (prefersLight ? "light" : "dark"));
 }
 
-els.newProjectBtn.addEventListener("click", openModal);
-els.modalClose.addEventListener("click", closeModal);
-els.npBrowse.addEventListener("click", browseFolder);
-els.npPath.addEventListener("input", validatePath);
-els.npCreate.addEventListener("click", createProject);
-els.modal.addEventListener("click", (event) => {
-  if (event.target === els.modal) closeModal();
-});
-els.browserClose.addEventListener("click", closeBrowser);
-els.browserUp.addEventListener("click", () => loadBrowser(state.browserParent || ""));
-els.browserSelect.addEventListener("click", () => {
-  if (state.browserPath) applyPickedFolder(state.browserPath);
-  closeBrowser();
-});
-els.browserModal.addEventListener("click", (event) => {
-  if (event.target === els.browserModal) closeBrowser();
-});
-els.settingsBtn.addEventListener("click", openSettings);
-els.settingsClose.addEventListener("click", closeSettings);
-els.settingsSave.addEventListener("click", saveSettings);
-els.usageRefresh.addEventListener("click", loadUsage);
-els.settingsModal.addEventListener("click", (event) => {
-  if (event.target === els.settingsModal) closeSettings();
-});
-document.querySelectorAll(".small-btn[data-provider]").forEach((btn) => {
-  btn.addEventListener("click", () => runAccountAction(btn.dataset.provider, btn.dataset.action));
-});
-els.composer.addEventListener("submit", (event) => {
-  event.preventDefault();
-  sendMessage();
-});
-els.input.addEventListener("keydown", (event) => {
-  if (event.key === "Enter" && !event.shiftKey) {
-    event.preventDefault();
-    sendMessage();
-  }
-});
-els.input.addEventListener("input", autoGrow);
-els.applyBtn.addEventListener("click", () => {
-  if (state.currentConversationId) {
-    socket?.send(JSON.stringify({ type: "chat:action", projectId: state.currentProjectId, conversationId: state.currentConversationId, action: "apply" }));
-  }
-});
-els.discardBtn.addEventListener("click", () => {
-  if (state.currentConversationId) {
-    socket?.send(JSON.stringify({ type: "chat:action", projectId: state.currentProjectId, conversationId: state.currentConversationId, action: "discard" }));
-  }
-});
-els.stopBtn.addEventListener("click", () => {
-  if (state.currentConversationId) {
-    socket?.send(JSON.stringify({ type: "chat:stop", projectId: state.currentProjectId, conversationId: state.currentConversationId }));
-  }
-});
-els.langToggle.addEventListener("click", () => setLang(lang === "pt" ? "en" : "pt"));
-els.themeToggle.addEventListener("click", () => {
+function toggleTheme() {
   const current = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
   const next = current === "dark" ? "light" : "dark";
-  localStorage.setItem(THEME_KEY, next);
+  try {
+    localStorage.setItem(THEME_KEY, next);
+  } catch {
+    /* ignore */
+  }
   applyTheme(next);
-});
-document.querySelectorAll(".tab").forEach((tab) => {
-  tab.addEventListener("click", () => {
-    const name = tab.dataset.tab;
-    document.querySelectorAll(".tab").forEach((t2) => t2.classList.toggle("active", t2 === tab));
-    document.querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("active", p.id === `tab-${name}`));
-  });
-});
-els.transcript.addEventListener("scroll", () => {
-  state.autoscroll = Math.abs(els.transcript.scrollHeight - els.transcript.scrollTop - els.transcript.clientHeight) < 40;
-});
+}
 
-lang = localStorage.getItem(LANG_KEY) === "en" ? "en" : "pt";
-initTheme();
-applyStatic();
-setupUpdates();
-loadProjects();
-loadCredentials();
-render();
-connect();
+function toggleLang() {
+  setLang(getLang() === "pt" ? "en" : "pt");
+  const btn = document.getElementById("lang-toggle");
+  if (btn) btn.textContent = getLang() === "pt" ? "EN" : "PT";
+  notify();
+}
+
+function buildCommands() {
+  const commands = [
+    { label: t("cmdRunMission"), run: () => actions.setView("workspace") },
+    { label: t("cmdNewProject"), run: () => modals?.openNewProject() },
+    { label: t("cmdNewConversation"), run: newConversation },
+    { label: t("cmdGoHome"), run: () => actions.setView("home") },
+    { label: t("cmdShowDiff"), run: () => switchInspectorTab("diff") },
+    { label: t("cmdRunTests"), run: comingSoon },
+    { label: t("cmdCreateCheckpoint"), run: comingSoon },
+    { label: t("cmdAskRepo"), run: comingSoon },
+    { label: t("cmdChangeAutonomy"), run: comingSoon },
+    { label: t("cmdInterrupt"), run: stop },
+    { label: t("cmdOpenSettings"), run: () => modals?.openSettings() },
+    { label: t("cmdToggleTheme"), run: toggleTheme },
+    { label: t("cmdToggleLang"), run: toggleLang },
+  ];
+  for (const project of state.projects) {
+    commands.push({ label: `${t("cmdSwitchProject")}: ${project.name}`, run: () => actions.selectProject(project.id) });
+  }
+  const project = currentProject();
+  if (project) {
+    for (const conversation of project.conversations ?? []) {
+      commands.push({ label: `↳ ${conversation.name}`, run: () => actions.selectConversation(conversation.id) });
+    }
+  }
+  return commands;
+}
+
+function switchInspectorTab(name) {
+  document.querySelectorAll("#inspector-tabs .tab").forEach((tab) => {
+    tab.classList.toggle("active", tab.dataset.tab === name);
+  });
+  document.querySelectorAll("#right .tab-panel").forEach((panel) => {
+    panel.classList.toggle("active", panel.id === `tab-${name}`);
+  });
+}
+
+function initResizers() {
+  const root = document.documentElement;
+  const setup = (id, variable, min, max) => {
+    const handle = document.getElementById(id);
+    if (!handle) return;
+    handle.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      handle.setPointerCapture(event.pointerId);
+      const startX = event.clientX;
+      const startWidth = Number.parseInt(getComputedStyle(root).getPropertyValue(variable)) || min;
+      const onMove = (moveEvent) => {
+        const delta = moveEvent.clientX - startX;
+        const next = Math.max(min, Math.min(max, startWidth + delta));
+        root.style.setProperty(variable, `${next}px`);
+      };
+      const onUp = () => {
+        handle.removeEventListener("pointermove", onMove);
+        handle.removeEventListener("pointerup", onUp);
+      };
+      handle.addEventListener("pointermove", onMove);
+      handle.addEventListener("pointerup", onUp);
+    });
+  };
+  setup("divider-left", "--sidebar-w", 200, 420);
+  setup("divider-right", "--right-w", 260, 620);
+}
+
+function initShortcuts() {
+  window.addEventListener("keydown", (event) => {
+    const mod = event.ctrlKey || event.metaKey;
+    if (mod && event.key.toLowerCase() === "k") {
+      event.preventDefault();
+      if (paletteOpen()) closePalette();
+      else openPalette(buildCommands());
+    } else if (mod && event.key.toLowerCase() === "p") {
+      event.preventDefault();
+      openPalette(buildCommands());
+    } else if (mod && event.shiftKey && event.key.toLowerCase() === "d") {
+      event.preventDefault();
+      switchInspectorTab("diff");
+    } else if (mod && event.shiftKey && event.key.toLowerCase() === "s") {
+      event.preventDefault();
+      switchInspectorTab("session");
+    } else if (mod && event.key === "Enter") {
+      const form = document.querySelector(".composer");
+      if (form) {
+        event.preventDefault();
+        form.requestSubmit();
+      }
+    } else if (event.key === "Escape") {
+      if (paletteOpen()) closePalette();
+    }
+  });
+}
+
+function initFooter() {
+  document.getElementById("theme-toggle")?.addEventListener("click", toggleTheme);
+  document.getElementById("lang-toggle")?.addEventListener("click", toggleLang);
+  document.getElementById("palette-btn")?.addEventListener("click", () => openPalette(buildCommands()));
+  document.getElementById("brand-home")?.addEventListener("click", () => actions.setView("home"));
+  document.querySelectorAll("#inspector-tabs .tab").forEach((tab) => {
+    tab.addEventListener("click", () => switchInspectorTab(tab.dataset.tab));
+  });
+}
+
+async function boot() {
+  initLang();
+  initTheme();
+  initPalette();
+  applyStatic();
+  modals = initModals(actions);
+  initResizers();
+  initShortcuts();
+  initFooter();
+  document.getElementById("lang-toggle").textContent = getLang() === "pt" ? "EN" : "PT";
+  subscribe(renderAll);
+  initSocket(onMessage);
+  await loadProjects();
+  notify();
+  api
+    .getCredentials()
+    .then((credentials) => {
+      patch({ credentials });
+      modals.renderCredentials();
+    })
+    .catch(() => undefined);
+  modals.setupUpdates();
+  if (!isConnected()) toast(t("noConnection"), "warn");
+}
+
+void boot();
