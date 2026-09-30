@@ -50,7 +50,10 @@ function renderHeader(project, conversation, actions) {
   const canApply =
     canAct &&
     (state.missionSummary
-      ? state.missionSummary.status === "ready"
+      ? state.missionSummary.status === "ready" &&
+        !state.missionSummary.verification.some(
+          (check) => check.status === "failed" || check.status === "running",
+        )
       : !conversation.validationRequired);
 
   const header = el("header", { class: "workspace-header" });
@@ -69,6 +72,11 @@ function renderHeader(project, conversation, actions) {
         .join("  •  "),
     }),
   );
+  const metadata = info.querySelector(".proj-meta");
+  if (metadata) {
+    metadata.remove();
+    info.append(el("details", {}, [el("summary", { text: t("workTechnical") }), metadata]));
+  }
   header.appendChild(info);
 
   const actionsRow = el("div", { class: "header-actions" });
@@ -157,7 +165,14 @@ function renderTranscript(conversation, scroll) {
         text: message.meta ? `${message.text}\n${message.meta}` : message.text,
       }),
     );
-    container.appendChild(row);
+    if (["tool", "system", "routing"].includes(message.role))
+      container.appendChild(
+        el("details", { class: "message-details" }, [
+          el("summary", { text: roleLabel(message.role) }),
+          row,
+        ]),
+      );
+    else container.appendChild(row);
   }
   if (isRunning(conversation.id)) {
     container.appendChild(
@@ -199,6 +214,7 @@ function renderComposer(actions) {
       }
     },
   });
+  input.value = draft;
   form.append(
     input,
     el("button", { class: "primary-btn send-btn", type: "submit", text: t("send") }),

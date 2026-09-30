@@ -24,7 +24,9 @@ export function initModals(actions) {
   });
   ids("np-browse").addEventListener("click", () => browseFolder(npPath, npName, validate));
   npPath.addEventListener("input", () => validate(npPath, npStatus));
-  npCreate.addEventListener("click", () => createProject(npName, npPath, npStatus, npCreate, modal, actions));
+  npCreate.addEventListener("click", () =>
+    createProject(npName, npPath, npStatus, npCreate, modal, actions),
+  );
 
   ids("browser-close").addEventListener("click", () => browserModal.classList.add("hidden"));
   ids("browser-up").addEventListener("click", () => loadBrowser(browser.parent || ""));
@@ -65,7 +67,11 @@ async function browseFolder(npPath, npName, validate) {
 
 function applyPickedFolder(folder, npPath, npName, validate) {
   npPath.value = folder;
-  if (!npName.value) npName.value = folder.replace(/[\\/]+$/, "").split(/[\\/]/).pop();
+  if (!npName.value)
+    npName.value = folder
+      .replace(/[\\/]+$/, "")
+      .split(/[\\/]/)
+      .pop();
   validate(npPath, ids("np-status"));
 }
 
@@ -87,7 +93,9 @@ async function loadBrowser(target) {
     pathEl.textContent = data.path || "—";
     clear(listEl);
     if (data.error) {
-      listEl.appendChild(el("div", { class: "browser-empty", text: `${t("browserNoAccess")}${data.error}` }));
+      listEl.appendChild(
+        el("div", { class: "browser-empty", text: `${t("browserNoAccess")}${data.error}` }),
+      );
     }
     if ((data.entries?.length ?? 0) === 0 && !data.error) {
       listEl.appendChild(el("div", { class: "browser-empty", text: t("browserEmpty") }));
@@ -185,20 +193,29 @@ function initSettings(settingsModal) {
     const cred = state.credentials;
     if (!cred) return;
     if (credSummary) {
-      credSummary.textContent = `Claude: ${cred.claude?.mode ?? "?"} · Codex: ${cred.codex?.mode ?? "?"} · Jev: ${cred.typesafe?.configured ? "ok" : "off"}`;
+      credSummary.textContent =
+        cred.claude?.mode === "none" ? t("assistantDisconnected") : t("assistantConnected");
     }
-    if (tsHint) tsHint.textContent = cred.typesafe?.configured ? `atual: ${cred.typesafe.hint}` : "";
+    if (tsHint)
+      tsHint.textContent = cred.typesafe?.configured ? `atual: ${cred.typesafe.hint}` : "";
     if (claudeMode) {
-      claudeMode.textContent = cred.claude.mode;
+      claudeMode.textContent = t(
+        cred.claude.mode === "none" ? "assistantDisconnected" : "assistantConnected",
+      );
       claudeMode.className = `mode-chip ${cred.claude.mode}`;
     }
-    if (claudeAccount) claudeAccount.textContent = cred.claude.mode === "subscription" ? cred.claude.detail : "";
+    if (claudeAccount)
+      claudeAccount.textContent = cred.claude.mode === "subscription" ? cred.claude.detail : "";
     if (codexMode) {
-      codexMode.textContent = cred.codex.mode;
+      codexMode.textContent = t(
+        cred.codex.mode === "none" ? "assistantDisconnected" : "assistantConnected",
+      );
       codexMode.className = `mode-chip ${cred.codex.mode}`;
     }
     if (codexAccount) {
-      codexAccount.textContent = [cred.codex.account, cred.codex.plan && `(${cred.codex.plan})`].filter(Boolean).join(" ");
+      codexAccount.textContent = [cred.codex.account, cred.codex.plan && `(${cred.codex.plan})`]
+        .filter(Boolean)
+        .join(" ");
     }
     const complex = ids("input-complex-model");
     if (complex && !complex.value) complex.value = cred.complexModel || "";
@@ -228,7 +245,9 @@ function initSettings(settingsModal) {
         usageBar("7d", c.sevenDay?.utilization ?? null),
       );
     } else {
-      parts.push(`<div class="cred-line"><span>Claude</span><b>${escapeHtml(t("unavailable"))}</b></div>`);
+      parts.push(
+        `<div class="cred-line"><span>Claude</span><b>${escapeHtml(t("unavailable"))}</b></div>`,
+      );
     }
     const codex = data.codex || {};
     parts.push(
@@ -255,9 +274,11 @@ function initSettings(settingsModal) {
     const typesafe = ids("input-typesafe").value.trim();
     if (typesafe) values.TYPESAFE_API_KEY = typesafe;
     if (ids("clear-anthropic").checked) values.ANTHROPIC_API_KEY = "";
-    else if (ids("input-anthropic").value.trim()) values.ANTHROPIC_API_KEY = ids("input-anthropic").value.trim();
+    else if (ids("input-anthropic").value.trim())
+      values.ANTHROPIC_API_KEY = ids("input-anthropic").value.trim();
     if (ids("clear-openai").checked) values.OPENAI_API_KEY = "";
-    else if (ids("input-openai").value.trim()) values.OPENAI_API_KEY = ids("input-openai").value.trim();
+    else if (ids("input-openai").value.trim())
+      values.OPENAI_API_KEY = ids("input-openai").value.trim();
     const model = ids("input-complex-model").value.trim();
     if (model) values.DEFAULT_COMPLEX_MODEL = model;
     if (!isConnected()) {
@@ -358,7 +379,10 @@ function initSettings(settingsModal) {
       setupUpdates,
       onAccountStart: (msg) => pushAccountLog("sys", `# ${msg.provider} ${msg.action}...`),
       onAccountOutput: (msg) =>
-        pushAccountLog(msg.stream === "stderr" ? "err" : msg.stream === "status" ? "sys" : "", msg.line),
+        pushAccountLog(
+          msg.stream === "stderr" ? "err" : msg.stream === "status" ? "sys" : "",
+          msg.line,
+        ),
       onAccountDone: (msg) => {
         setAccountButtonsBusy(msg.data?.provider, false);
         pushAccountLog(

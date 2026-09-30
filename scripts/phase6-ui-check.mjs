@@ -114,14 +114,26 @@ const server = createServer(async (req, res) => {
       const body = raw ? JSON.parse(raw) : {};
       requests.push({ path: url.pathname, body });
       if (url.pathname.endsWith("/browser-qa")) {
-        const verification = { id: "12345678-1234-1234-1234-123456789abc", missionId: conversation.id,
-          kind: "browser", status: "passed", summary: "Page loaded", output: "Fixture <script>unsafe()</script>",
-          at: Date.now(), head: body.expectedHead,
-          screenshot: `/api/missions/${conversation.id}/browser-qa/12345678-1234-1234-1234-123456789abc/screenshot` };
-        summary.verification = [...summary.verification.filter(item => item.kind !== "browser"), verification];
+        const verification = {
+          id: "12345678-1234-1234-1234-123456789abc",
+          missionId: conversation.id,
+          kind: "browser",
+          status: "passed",
+          summary: "Page loaded",
+          output: "Fixture <script>unsafe()</script>",
+          at: Date.now(),
+          head: body.expectedHead,
+          screenshot: `/api/missions/${conversation.id}/browser-qa/12345678-1234-1234-1234-123456789abc/screenshot`,
+        };
+        summary.verification = [
+          ...summary.verification.filter((item) => item.kind !== "browser"),
+          verification,
+        ];
         summary.revision++;
         broadcast({ type: "mission:summary", summary });
-        res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(verification)); return;
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify(verification));
+        return;
       }
       if (url.pathname.endsWith("/pr")) {
         summary.pullRequest = { ...pullRequest, title: body.title, isDraft: body.draft };
@@ -265,6 +277,11 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ ok: true }));
       return;
     }
+    if (url.pathname === "/api/work/overview") {
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ tasks: [], schedules: [], timeZone: "UTC", schedulerError: null }));
+      return;
+    }
     const payload =
       url.pathname === "/api/projects"
         ? [project]
@@ -367,20 +384,29 @@ app.whenReady().then(async () => {
     await waitFor("!!document.querySelector('.project-head')");
     await evaluate("document.querySelector('.project-head').click()");
     await waitFor("!!document.querySelector('.workspace-header')");
-    await evaluate(
-      "[...document.querySelectorAll('.nav-item')].find(node => node.textContent.toLowerCase().includes('missões')).click()",
-    );
+    await evaluate("document.querySelector('[data-view=missions]').click()");
     await waitFor(
       "!!document.querySelector('.pr-prepare') && !document.querySelector('.pr-prepare').disabled",
     );
     await evaluate("document.querySelector('.browser-qa-open').click()");
     await waitFor("!!document.querySelector('.browser-qa-dialog[open]')");
-    await evaluate("{ const dialog = document.querySelector('.browser-qa-dialog'); dialog.querySelector('input').value = 'http://localhost:3000'; dialog.querySelector('select').value = 'msedge'; dialog.querySelector('form').requestSubmit(); }");
-    await waitFor("!!document.querySelector('.browser-qa-capture') && !document.querySelector('.browser-qa-open').disabled");
-    const qaRequest = requests.find(item => item.path.endsWith('/browser-qa'));
-    assert.deepEqual(qaRequest.body, { url: 'http://localhost:3000', channel: 'msedge', expectedHead: summary.head });
+    await evaluate(
+      "{ const dialog = document.querySelector('.browser-qa-dialog'); dialog.querySelector('input').value = 'http://localhost:3000'; dialog.querySelector('select').value = 'msedge'; dialog.querySelector('form').requestSubmit(); }",
+    );
+    await waitFor(
+      "!!document.querySelector('.browser-qa-capture') && !document.querySelector('.browser-qa-open').disabled",
+    );
+    const qaRequest = requests.find((item) => item.path.endsWith("/browser-qa"));
+    assert.deepEqual(qaRequest.body, {
+      url: "http://localhost:3000",
+      channel: "msedge",
+      expectedHead: summary.head,
+    });
     assert.equal(await evaluate("!!document.querySelector('.browser-qa-section script')"), false);
-    assert.equal(await evaluate("document.querySelector('.browser-qa-capture').getAttribute('href')"), `/api/missions/${conversation.id}/browser-qa/12345678-1234-1234-1234-123456789abc/screenshot`);
+    assert.equal(
+      await evaluate("document.querySelector('.browser-qa-capture').getAttribute('href')"),
+      `/api/missions/${conversation.id}/browser-qa/12345678-1234-1234-1234-123456789abc/screenshot`,
+    );
     await capture("phase6-browser-qa");
     await evaluate("document.querySelector('.pr-prepare').click()");
     await waitFor("!!document.querySelector('.pr-dialog[open]')");
@@ -419,7 +445,9 @@ app.whenReady().then(async () => {
     await waitFor("!document.querySelector('.ci-refresh').disabled");
     ciStatus = "none";
     await evaluate("document.querySelector('.ci-refresh').click()");
-    await waitFor("document.querySelector('.ci-status')?.textContent.toLowerCase().includes('nenhum check')");
+    await waitFor(
+      "document.querySelector('.ci-status')?.textContent.toLowerCase().includes('nenhum check')",
+    );
     await waitFor("!document.querySelector('.ci-refresh').disabled");
     ciStatus = "passed";
     await evaluate("document.querySelector('.ci-refresh').click()");

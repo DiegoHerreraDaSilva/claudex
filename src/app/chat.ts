@@ -301,6 +301,13 @@ export class ChatService extends TypedEmitter<ChatEvents> {
       throw new Error("action denied by autonomy policy");
   }
 
+  projectBusy(projectId: string): boolean {
+    return (
+      this.operations.has(projectId) ||
+      !!this.registry.get(projectId)?.conversations.some((item) => this.running.has(item.id))
+    );
+  }
+
   async withProjectOperation<T>(projectId: string, action: () => Promise<T>): Promise<T> {
     const project = this.registry.get(projectId);
     if (!project) throw new Error("project not found");
@@ -416,8 +423,9 @@ export class ChatService extends TypedEmitter<ChatEvents> {
     const summary = await this.missionSummary(conversationId);
     if (
       (conversation.validationRequired && !summary) ||
-      (summary && (summary.status !== "ready" ||
-        summary.verification.some((run) => run.status === "failed" || run.status === "running")))
+      (summary &&
+        (summary.status !== "ready" ||
+          summary.verification.some((run) => run.status === "failed" || run.status === "running")))
     )
       return { ok: false, reason: "mission has not passed verification and review" };
     if (conversation.worktreePath) {

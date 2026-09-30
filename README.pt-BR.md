@@ -2,7 +2,7 @@
 
 **Orquestrador desktop local-first que roteia suas tarefas de código entre Claude Code, Codex e a API de decisão Jev (TypeSafe) — com uma interface de chat.**
 
-Você descreve a tarefa em linguagem natural. O Claudex pergunta ao Jev (um modelo de decisão rápido) como o trabalho deve ser tratado, encaminha para o agente certo, executa dentro de um *git worktree* isolado da **sua** pasta, mostra o diff e deixa você **Aplicar** ou **Descartar**. Tudo roda na sua máquina, com **suas contas e chaves de API**.
+Você descreve a tarefa em linguagem natural. O Claudex pergunta ao Jev (um modelo de decisão rápido) como o trabalho deve ser tratado, encaminha para o agente certo, executa dentro de um _git worktree_ isolado da **sua** pasta, mostra o diff e deixa você **Aplicar** ou **Descartar**. Tudo roda na sua máquina, com **suas contas e chaves de API**.
 
 🌐 [English](README.md) · **Português (BR)**
 
@@ -57,8 +57,8 @@ Se a API da TypeSafe estiver indisponível (sem chave, `429`/`529`/`5xx`), o Cla
 ## Requisitos
 
 - **Node.js 22+** e **git** no `PATH`
-- Assinatura **Claude Pro/Max** *ou* `ANTHROPIC_API_KEY`
-- Assinatura **ChatGPT Plus/Pro** *ou* `OPENAI_API_KEY` (para o caminho Codex)
+- Assinatura **Claude Pro/Max** _ou_ `ANTHROPIC_API_KEY`
+- Assinatura **ChatGPT Plus/Pro** _ou_ `OPENAI_API_KEY` (para o caminho Codex)
 - Chave da **TypeSafe (Jev)** — opcional; sem ela, usa o roteador heurístico local
   (obtenha em https://console.typesafe.ai/keys)
 
@@ -79,6 +79,7 @@ npm run build
 ```
 
 > A pasta escolhida precisa ser um repositório git. Se ainda não for:
+>
 > ```bash
 > cd /caminho/do/seu/projeto
 > git init && git commit --allow-empty -m "init"
@@ -109,11 +110,11 @@ No Windows você pode criar um atalho na Área de Trabalho apontando para `npm r
 
 No app, clique em **configurações** e use os botões conectar/desconectar ou os campos de chave. O que você salvar vai para o `.env` da sua máquina (que está no `.gitignore`).
 
-| Provedor | Conectar com assinatura | Ou usar chave de API |
-| --- | --- | --- |
-| **Claude** | **Conectar** roda `claude auth login` (abre o navegador para entrar com Claude Pro/Max) | cole `ANTHROPIC_API_KEY` |
-| **Codex** | **Conectar** roda `codex login` → *Sign in with ChatGPT* | cole `OPENAI_API_KEY` |
-| **Jev / TypeSafe** | — | cole `TYPESAFE_API_KEY` (https://console.typesafe.ai/keys) |
+| Provedor           | Conectar com assinatura                                                                 | Ou usar chave de API                                       |
+| ------------------ | --------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| **Claude**         | **Conectar** roda `claude auth login` (abre o navegador para entrar com Claude Pro/Max) | cole `ANTHROPIC_API_KEY`                                   |
+| **Codex**          | **Conectar** roda `codex login` → _Sign in with ChatGPT_                                | cole `OPENAI_API_KEY`                                      |
+| **Jev / TypeSafe** | —                                                                                       | cole `TYPESAFE_API_KEY` (https://console.typesafe.ai/keys) |
 
 **Desconectar** roda o logout correspondente (`claude auth logout` / `codex logout`) e remove as credenciais salvas.
 
@@ -178,7 +179,7 @@ Testes de fumaça: `npm run smoke:jev`, `npm run smoke:worktree`, `SMOKE_AGENTS=
 
 ## Segurança e privacidade
 
-- Tudo roda **localmente**. Nada é enviado a lugar algum além dos provedores de modelo e da TypeSafe, usando *suas* credenciais.
+- Tudo roda **localmente**. Nada é enviado a lugar algum além dos provedores de modelo e da TypeSafe, usando _suas_ credenciais.
 - `.env`, `~/.claude/` e `~/.codex/` **nunca** são commitados; o `.env` está no `.gitignore`.
 - Os agentes rodam em **worktrees git isolados**; mudanças só chegam à sua branch quando você clica em **Aplicar**.
 
@@ -187,3 +188,19 @@ Testes de fumaça: `npm run smoke:jev`, `npm run smoke:worktree`, `SMOKE_AGENTS=
 ## Licença
 
 [MIT](LICENSE) © Diego Herrera
+
+## Assistentes, tarefas e agendamentos
+
+A tela inicial orienta os três primeiros passos: conectar a conta Claude, adicionar a pasta de um projeto Git e descrever o pedido. Novas tarefas começam em **Com minha supervisão**; você pode escolher **Somente analisar** ou **Trabalhar sozinho**.
+
+- **Assistentes** mostra conexão, papel de Claude/Codex, atividade e trabalhos recentes. Chaves e modelos ficam em detalhes técnicos das configurações.
+- **Tarefas** permite salvar, editar pedidos ainda não executados, executar, parar, buscar, filtrar por projeto/situação, copiar e abrir resultados. Cada execução cria uma conversa própria; excluir a tarefa mantém arquivos e histórico da conversa.
+- **Agendamentos** permite definir um horário, repetir diariamente/semanalmente, editar, pausar, retomar, excluir e abrir o histórico das tarefas criadas.
+
+Os agendamentos são locais: o Claudex precisa permanecer aberto. A verificação ocorre a cada 15 segundos. Ao reabrir, apenas uma ocorrência vencida é considerada; ocorrências perdidas não se acumulam. Se faltar conexão ou o projeto estiver ocupado, o pedido aguarda. Uma execução interrompida não é retomada automaticamente. Mudanças no fuso exigem revisar o horário.
+
+Agendar cria pedidos; a aplicação das alterações continua dependendo da revisão e das permissões da missão. Os dados são gravados em `automation.json` na pasta de dados do Claudex, com validação e gravação atômica. Existem limites de 1.000 tarefas e 100 agendamentos; exclua itens antigos da lista ao atingir o limite.
+
+Os temas usam grafite e cinza suave. Há navegação em janela estreita e textos em português/inglês, com detalhes técnicos recolhidos.
+
+Validação da interface (após `npm run build`): `npx electron scripts/experience-ui-check.mjs`. Esse teste usa persistência e rotas reais, com respostas dos assistentes simuladas, sem chamadas pagas.

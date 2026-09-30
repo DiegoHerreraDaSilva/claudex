@@ -140,6 +140,11 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ ok: true }));
       return;
     }
+    if (url.pathname === "/api/work/overview") {
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ tasks: [], schedules: [], timeZone: "UTC", schedulerError: null }));
+      return;
+    }
     const payload =
       url.pathname === "/api/projects"
         ? [project]
@@ -241,11 +246,11 @@ app.whenReady().then(async () => {
     await waitFor("!!document.querySelector('.project-head')");
     await evaluate("document.querySelector('.project-head').click()");
     await waitFor("!!document.querySelector('.workspace-header')");
-    await evaluate(
-      "[...document.querySelectorAll('.nav-item')].find(node => /missões|missions/i.test(node.textContent)).click()",
-    );
+    await evaluate("document.querySelector('[data-view=missions]').click()");
     await waitFor("!!document.querySelector('.mission-complete.ready')");
-    await waitFor("[...document.querySelectorAll('.mission-complete button')].some(button => /^(apply|aplicar)$/.test(button.textContent) && !button.disabled)");
+    await waitFor(
+      "[...document.querySelectorAll('.mission-complete button')].some(button => /^(apply|aplicar)$/.test(button.textContent) && !button.disabled)",
+    );
     const ready = await evaluate(
       `({ rows: document.querySelectorAll('.verification-row').length, apply: [...document.querySelectorAll('.mission-complete button')].find(button => /^(apply|aplicar)$/.test(button.textContent))?.disabled, title: document.querySelector('.mission-complete-title').textContent })`,
     );

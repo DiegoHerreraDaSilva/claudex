@@ -41,7 +41,9 @@
         <div class="inspector-head">
           <span class="inspector-title" data-i18n="inspector">Inspector</span>
           <span id="inspector-branch" class="inspector-branch"></span>
-          <button id="inspector-close" class="ghost-btn inspector-close" data-i18n="close">Fechar</button>
+          <button id="inspector-close" class="ghost-btn inspector-close" data-i18n="close">
+            Fechar
+          </button>
         </div>
         <div class="tabs" id="inspector-tabs">
           <button class="tab active" data-tab="diff" data-i18n="tabDiff">Diff</button>
@@ -75,17 +77,28 @@
             <input id="np-name" type="text" placeholder="meu-projeto" autocomplete="off" />
           </div>
           <div class="field">
-            <div class="field-label" data-i18n="folderLabel">Pasta do projeto (repositório git)</div>
+            <div class="field-label" data-i18n="folderLabel">
+              Pasta do projeto (repositório git)
+            </div>
             <div class="folder-row">
-              <input id="np-path" type="text" placeholder="C:\\caminho\\do\\repo" autocomplete="off" />
-              <button id="np-browse" class="small-btn" data-i18n="chooseFolder">Escolher pasta</button>
+              <input
+                id="np-path"
+                type="text"
+                placeholder="C:\\caminho\\do\\repo"
+                autocomplete="off"
+              />
+              <button id="np-browse" class="small-btn" data-i18n="chooseFolder">
+                Escolher pasta
+              </button>
             </div>
             <div id="np-status" class="np-status"></div>
           </div>
         </div>
         <div class="modal-foot">
           <span></span>
-          <button id="np-create" class="primary-btn" data-i18n="createProject">Criar projeto</button>
+          <button id="np-create" class="primary-btn" data-i18n="createProject">
+            Criar projeto
+          </button>
         </div>
       </div>
     </div>
@@ -102,7 +115,9 @@
         </div>
         <div class="modal-foot">
           <button id="browser-up" class="small-btn" data-i18n="up">Subir</button>
-          <button id="browser-select" class="primary-btn" data-i18n="selectFolder">Selecionar esta pasta</button>
+          <button id="browser-select" class="primary-btn" data-i18n="selectFolder">
+            Selecionar esta pasta
+          </button>
         </div>
       </div>
     </div>
@@ -124,11 +139,36 @@
                 </div>
                 <div id="claude-account" class="account-detail"></div>
                 <div class="btn-row">
-                  <button class="small-btn" data-provider="claude" data-action="login" data-i18n="connectSub">Conectar</button>
-                  <button class="small-btn danger" data-provider="claude" data-action="logout" data-i18n="disconnect">Desconectar</button>
+                  <button
+                    class="small-btn"
+                    data-provider="claude"
+                    data-action="login"
+                    data-i18n="connectSub"
+                  >
+                    Conectar
+                  </button>
+                  <button
+                    class="small-btn danger"
+                    data-provider="claude"
+                    data-action="logout"
+                    data-i18n="disconnect"
+                  >
+                    Desconectar
+                  </button>
                 </div>
-                <input id="input-anthropic" type="password" placeholder="ANTHROPIC_API_KEY (opcional)" autocomplete="off" />
-                <label class="clear"><input type="checkbox" id="clear-anthropic" /> <span data-i18n="clearAnthropic">Remover chave e usar a assinatura</span></label>
+                <details>
+                  <summary data-i18n="workTechnical">Detalhes técnicos</summary>
+                  <input
+                    id="input-anthropic"
+                    type="password"
+                    placeholder="ANTHROPIC_API_KEY (opcional)"
+                    autocomplete="off"
+                  />
+                  <label class="clear"
+                    ><input type="checkbox" id="clear-anthropic" />
+                    <span data-i18n="clearAnthropic">Remover chave e usar a assinatura</span></label
+                  >
+                </details>
               </div>
 
               <div class="account-card">
@@ -138,11 +178,36 @@
                 </div>
                 <div id="codex-account" class="account-detail"></div>
                 <div class="btn-row">
-                  <button class="small-btn" data-provider="codex" data-action="login" data-i18n="connectChatgpt">Conectar</button>
-                  <button class="small-btn danger" data-provider="codex" data-action="logout" data-i18n="disconnect">Desconectar</button>
+                  <button
+                    class="small-btn"
+                    data-provider="codex"
+                    data-action="login"
+                    data-i18n="connectChatgpt"
+                  >
+                    Conectar
+                  </button>
+                  <button
+                    class="small-btn danger"
+                    data-provider="codex"
+                    data-action="logout"
+                    data-i18n="disconnect"
+                  >
+                    Desconectar
+                  </button>
                 </div>
-                <input id="input-openai" type="password" placeholder="OPENAI_API_KEY (opcional)" autocomplete="off" />
-                <label class="clear"><input type="checkbox" id="clear-openai" /> <span data-i18n="clearOpenai">Remover chave e usar o ChatGPT</span></label>
+                <details>
+                  <summary data-i18n="workTechnical">Detalhes técnicos</summary>
+                  <input
+                    id="input-openai"
+                    type="password"
+                    placeholder="OPENAI_API_KEY (opcional)"
+                    autocomplete="off"
+                  />
+                  <label class="clear"
+                    ><input type="checkbox" id="clear-openai" />
+                    <span data-i18n="clearOpenai">Remover chave e usar o ChatGPT</span></label
+                  >
+                </details>
               </div>
             </div>
           </section>
@@ -155,19 +220,32 @@
             <div id="usage-status" class="usage-grid"><span class="empty">—</span></div>
           </section>
 
-          <section class="settings-section">
+          <details class="settings-section">
+            <summary data-i18n="workTechnical">Detalhes técnicos</summary>
             <div class="section-head">
               <h3 class="section-title">Jev / TypeSafe</h3>
               <em id="ts-hint" class="hint"></em>
             </div>
-            <input id="input-typesafe" type="password" data-i18n-ph="typesafePh" placeholder="Cole a chave de console.typesafe.ai/keys" autocomplete="off" />
-          </section>
+            <input
+              id="input-typesafe"
+              type="password"
+              data-i18n-ph="typesafePh"
+              placeholder="Cole a chave de console.typesafe.ai/keys"
+              autocomplete="off"
+            />
+          </details>
 
-          <section class="settings-section">
+          <details class="settings-section">
+            <summary data-i18n="workTechnical">Detalhes técnicos</summary>
             <h3 class="section-title" data-i18n="execution">Execução</h3>
             <label class="field-label" data-i18n="codexModel">Modelo forte do Codex</label>
-            <input id="input-complex-model" type="text" placeholder="gpt-6-sol" autocomplete="off" />
-          </section>
+            <input
+              id="input-complex-model"
+              type="text"
+              placeholder="gpt-6-sol"
+              autocomplete="off"
+            />
+          </details>
 
           <section class="settings-section">
             <h3 data-i18n="autonomy">Autonomia</h3>
@@ -179,13 +257,16 @@
               <h3 class="section-title" data-i18n="appUpdates">Atualizações</h3>
               <span id="update-status" class="settings-msg"></span>
             </div>
-            <button id="check-updates" class="small-btn" data-i18n="checkUpdates">Verificar atualizações</button>
+            <button id="check-updates" class="small-btn" data-i18n="checkUpdates">
+              Verificar atualizações
+            </button>
           </section>
 
-          <section class="settings-section">
+          <details class="settings-section">
+            <summary data-i18n="workTechnical">Detalhes técnicos</summary>
             <h3 class="section-title" data-i18n="authLog">Log de autenticação</h3>
             <pre id="account-log" class="account-log"></pre>
-          </section>
+          </details>
         </div>
         <div class="modal-foot">
           <span id="settings-msg" class="settings-msg"></span>
@@ -196,7 +277,15 @@
 
     <div id="palette" class="palette hidden">
       <div class="palette-card">
-        <input id="palette-input" class="palette-input" type="text" spellcheck="false" data-i18n-ph="palettePlaceholder" placeholder="Digite um comando..." autocomplete="off" />
+        <input
+          id="palette-input"
+          class="palette-input"
+          type="text"
+          spellcheck="false"
+          data-i18n-ph="palettePlaceholder"
+          placeholder="Digite um comando..."
+          autocomplete="off"
+        />
         <div id="palette-list" class="palette-list"></div>
       </div>
     </div>

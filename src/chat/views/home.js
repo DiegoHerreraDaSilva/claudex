@@ -2,9 +2,12 @@ import { clear, el } from "../lib/dom.js";
 import { t } from "../lib/i18n.js";
 import { state } from "../lib/store.js";
 
+let promptDraft = "";
+
 export function renderHome(root, actions) {
   clear(root);
   const view = el("div", { class: "view home" });
+  view.appendChild(renderOnboarding(actions));
   view.appendChild(renderHero(actions));
   view.appendChild(renderQuickActions(actions));
   const missions = collectMissions();
@@ -31,12 +34,17 @@ function renderHero(actions) {
       event.preventDefault();
       const value = input.value.trim();
       if (!value) return;
-      input.value = "";
-      actions.startMission(value);
+      actions.newTask({ prompt: value, startNow: true });
     },
   });
   const input = el("textarea", {
     class: "hero-input",
+    value: promptDraft,
+    maxlength: 12000,
+    "aria-label": t("homePromptPlaceholder"),
+    oninput: () => {
+      promptDraft = input.value;
+    },
     rows: 2,
     placeholder: t("homePromptPlaceholder"),
     "data-i18n-ph": "homePromptPlaceholder",
@@ -47,6 +55,7 @@ function renderHero(actions) {
       }
     },
   });
+  input.value = promptDraft;
   form.append(input, el("button", { class: "primary-btn hero-send", text: t("quickNewMission") }));
   hero.appendChild(form);
   return hero;
@@ -55,9 +64,9 @@ function renderHero(actions) {
 function renderQuickActions(actions) {
   const row = el("div", { class: "quick-actions" });
   const items = [
-    { label: "quickAskRepo", run: () => actions.comingSoon() },
-    { label: "quickReview", run: () => actions.setView("workspace") },
-    { label: "quickRunTests", run: () => actions.comingSoon() },
+    { label: "quickAskRepo", run: () => actions.setView("intelligence") },
+    { label: "quickReview", run: () => actions.setView("missions") },
+    { label: "quickRunTests", run: () => actions.setView("missions") },
     { label: "quickWorkspace", run: () => actions.setView("workspace") },
   ];
   for (const item of items) {
@@ -70,7 +79,8 @@ function collectMissions() {
   const missions = [];
   for (const project of state.projects) {
     for (const conversation of project.conversations ?? []) {
-      missions.push({ project, conversation });
+      if (conversation.running || conversation.messageCount > 0)
+        missions.push({ project, conversation });
     }
   }
   missions.sort((a, b) => Number(b.conversation.running) - Number(a.conversation.running));
@@ -94,6 +104,14 @@ function renderMissions(missions, actions) {
     const running = conversation.running;
     const card = el("div", {
       class: "mission-card",
+      role: "button",
+      tabindex: 0,
+      onkeydown: (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          actions.openWorkspace(project.id, conversation.id);
+        }
+      },
       onclick: () => actions.openWorkspace(project.id, conversation.id),
     });
     card.append(
@@ -104,7 +122,10 @@ function renderMissions(missions, actions) {
         ]),
       ]),
       el("div", { class: "mission-title", text: conversation.name }),
-      el("div", { class: "mission-sub", text: `${project.name} · ${conversation.activeAgent || project.baseBranch || "main"}` }),
+      el("div", {
+        class: "mission-sub",
+        text: project.name,
+      }),
     );
     grid.appendChild(card);
   }
@@ -123,6 +144,14 @@ function renderProjects(actions) {
   for (const project of state.projects) {
     const card = el("div", {
       class: "project-card",
+      role: "button",
+      tabindex: 0,
+      onkeydown: (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          actions.selectProject(project.id);
+        }
+      },
       onclick: () => actions.selectProject(project.id),
     });
     card.append(
@@ -136,5 +165,26 @@ function renderProjects(actions) {
     grid.appendChild(card);
   }
   section.appendChild(grid);
+  return section;
+}
+
+function renderOnboarding(actions) {
+  const section = el("section", { class: "onboarding" }, [
+    el("h2", { text: t("onboardingTitle") }),
+  ]);
+  const steps = el("div", { class: "onboarding-steps" });
+  for (const [index, key, hint, action] of [
+    [1, "onboardingAccount", "onboardingAccountHint", actions.openSettings],
+    [2, "onboardingProject", "onboardingProjectHint", actions.openNewProject],
+    [3, "onboardingTask", "onboardingTaskHint", () => actions.newTask()],
+  ])
+    steps.append(
+      el("button", { class: "onboarding-step", onclick: action }, [
+        el("span", { class: "step-number", text: String(index) }),
+        el("strong", { text: t(key) }),
+        el("span", { text: t(hint) }),
+      ]),
+    );
+  section.append(steps);
   return section;
 }

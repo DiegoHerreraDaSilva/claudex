@@ -189,6 +189,11 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ ok: true }));
       return;
     }
+    if (url.pathname === "/api/work/overview") {
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ tasks: [], schedules: [], timeZone: "UTC", schedulerError: null }));
+      return;
+    }
     const payload =
       url.pathname === "/api/projects"
         ? [project]

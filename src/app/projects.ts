@@ -29,6 +29,7 @@ export interface Conversation {
   worktreePath?: string;
   usage?: { inputTokens: number; outputTokens: number; runs: number };
   costUsd?: number;
+  workItemId?: string;
   validationRequired?: boolean;
   autonomy?: AutonomyMode;
 }

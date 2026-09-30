@@ -4,7 +4,7 @@
 
 **A local-first desktop orchestrator that routes your coding tasks across Claude Code, Codex, and the Jev (TypeSafe) decision API — with a chat interface.**
 
-You describe a task in plain language. Claudex asks Jev (a fast decision model) how the work should be handled, then routes it to the right agent, runs it inside an isolated git worktree of *your* project folder, shows you the diff, and lets you apply or discard it. Everything runs on your machine with **your own accounts and API keys**.
+You describe a task in plain language. Claudex asks Jev (a fast decision model) how the work should be handled, then routes it to the right agent, runs it inside an isolated git worktree of _your_ project folder, shows you the diff, and lets you apply or discard it. Everything runs on your machine with **your own accounts and API keys**.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen)
@@ -62,8 +62,8 @@ If the TypeSafe API is unavailable (no key, `429`/`529`/`5xx`), Claudex falls ba
 ## Requirements
 
 - **Node.js 22+** and **git** on your `PATH`
-- A **Claude Pro/Max** subscription *or* an `ANTHROPIC_API_KEY`
-- A **ChatGPT Plus/Pro** subscription *or* an `OPENAI_API_KEY` (for the Codex path)
+- A **Claude Pro/Max** subscription _or_ an `ANTHROPIC_API_KEY`
+- A **ChatGPT Plus/Pro** subscription _or_ an `OPENAI_API_KEY` (for the Codex path)
 - A **TypeSafe (Jev) API key** — optional; without it Claudex uses the local heuristic router
   (get one at https://console.typesafe.ai/keys)
 
@@ -84,6 +84,7 @@ npm run build
 ```
 
 > The folder you point Claudex at must be a git repository. If it isn't yet:
+>
 > ```bash
 > cd /path/to/your/project
 > git init && git commit --allow-empty -m "init"
@@ -120,11 +121,11 @@ npm run dist   # Windows: nsis · macOS: dmg · Linux: AppImage (output in relea
 
 Open the app, click **settings** (top-right), and use the connect/disconnect buttons or the key fields. Anything you save is written to `.env` on your machine (which is git-ignored).
 
-| Provider | Connect with subscription | Or use an API key |
-| --- | --- | --- |
-| **Claude** | **Connect** runs `claude auth login` (opens your browser to sign in with Claude Pro/Max) | paste `ANTHROPIC_API_KEY` |
-| **Codex** | **Connect** runs `codex login` → *Sign in with ChatGPT* | paste `OPENAI_API_KEY` |
-| **Jev / TypeSafe** | — | paste `TYPESAFE_API_KEY` (https://console.typesafe.ai/keys) |
+| Provider           | Connect with subscription                                                                | Or use an API key                                           |
+| ------------------ | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| **Claude**         | **Connect** runs `claude auth login` (opens your browser to sign in with Claude Pro/Max) | paste `ANTHROPIC_API_KEY`                                   |
+| **Codex**          | **Connect** runs `codex login` → _Sign in with ChatGPT_                                  | paste `OPENAI_API_KEY`                                      |
+| **Jev / TypeSafe** | —                                                                                        | paste `TYPESAFE_API_KEY` (https://console.typesafe.ai/keys) |
 
 **Disconnect** runs the matching logout (`claude auth logout` / `codex logout`) and removes the stored credentials.
 
@@ -185,12 +186,12 @@ claudex clean                 # remove orphan worktrees and branches
 
 Options for `run`:
 
-| Flag | Effect |
-| --- | --- |
+| Flag                | Effect                                      |
+| ------------------- | ------------------------------------------- |
 | `--subtasks <json>` | Split the work manually, e.g. `'["a","b"]'` |
-| `--cleanup` | Remove worktrees after finishing |
-| `--dry-run` | Ask Jev for routing only; run no agents |
-| `--no-server` | Do not start the dashboard during the run |
+| `--cleanup`         | Remove worktrees after finishing            |
+| `--dry-run`         | Ask Jev for routing only; run no agents     |
+| `--no-server`       | Do not start the dashboard during the run   |
 
 Smoke tests:
 
@@ -231,7 +232,7 @@ src/
 
 ## Security & privacy
 
-- Everything runs **locally**. No data is sent anywhere except to the model providers and TypeSafe, using *your* credentials.
+- Everything runs **locally**. No data is sent anywhere except to the model providers and TypeSafe, using _your_ credentials.
 - `.env`, `~/.claude/`, and `~/.codex/` are **never** committed; `.env` is git-ignored.
 - Agents run in **isolated git worktrees**, and changes only reach your branch when you click **Apply**.
 
@@ -253,3 +254,17 @@ Issues and pull requests are welcome. Please run `npm run typecheck && npm run b
 ## License
 
 [MIT](LICENSE) © Diego Herrera
+
+## Assistants, tasks and local schedules
+
+The home screen guides users through connecting Claude, adding a Git project folder and describing their request. New tasks use **With my supervision** by default; **Analyze only** and **Work independently** remain available.
+
+- **Assistants** shows account state, each assistant's role, activity and recent work. API keys and model settings are under technical details.
+- **Tasks** supports saving, editing requests before execution, running, stopping, search, project/status filters, copying and opening results. Each execution creates a new conversation. Deleting a task preserves project files and conversation history.
+- **Schedules** supports one-time, daily and weekly requests, editing, pause/resume, deletion and task history.
+
+Schedules run locally while Claudex is open, checking every 15 seconds. Reopening considers at most one overdue occurrence, without replaying a backlog. Jobs wait if Claude is disconnected or the project is busy. Interrupted executions are not relaunched automatically. Time-zone changes require reviewing the schedule.
+
+Scheduling creates requests; applying changes still requires the mission's review and permissions. Validated data is written atomically to `automation.json` in the app's data folder. Limits are 1,000 tasks and 100 schedules; remove old list items when reaching the limit.
+
+The UI includes softer graphite/gray themes, navigation for narrow windows and Portuguese/English text. Run `npx electron scripts/experience-ui-check.mjs` after building to validate it with real persistence/routes and simulated assistants, without paid calls.

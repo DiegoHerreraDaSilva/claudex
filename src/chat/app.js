@@ -36,7 +36,7 @@ import { initModals } from "./views/modals.js";
 import { renderHome } from "./views/home.js";
 import { renderInspector } from "./views/inspector.js";
 import { renderMissionCenter } from "./views/missionCenter.js";
-import { renderPlaceholder } from "./views/placeholder.js";
+import { ensureWork, refreshWork, renderAutomation, openWorkForm } from "./views/automation.js";
 import { renderSidebar } from "./views/sidebar.js";
 import { renderWorkspace } from "./views/workspace.js";
 
@@ -55,6 +55,8 @@ const actions = {
   deleteProject,
   setView,
   openSettings: () => modals?.openSettings(),
+  openNewProject: () => modals?.openNewProject(),
+  newTask: (options) => openWorkForm(actions, options),
   startMission,
   send,
   stop,
@@ -69,8 +71,10 @@ const actions = {
 
 function renderAll() {
   ensureTools();
+  ensureWork();
   if (state.currentConversationId) ensureMissionEvents();
   renderSidebar(sidebarRoot, actions);
+  renderMobileNav();
   renderView();
   renderInspector();
   renderContext();
@@ -80,6 +84,10 @@ function renderAll() {
 }
 
 function renderView() {
+  document.body.classList.toggle(
+    "simple-view",
+    ["home", "agents", "tasks", "schedules"].includes(state.view),
+  );
   if (state.view === "missions" || state.view === "workspace") ensureMissionEvents();
   switch (state.view) {
     case "home":
@@ -98,13 +106,9 @@ function renderView() {
       renderProjectTools(viewHost, actions);
       break;
     case "agents":
-      renderPlaceholder(viewHost, "agentsTitle");
-      break;
     case "tasks":
-      renderPlaceholder(viewHost, "tasksTitle");
-      break;
     case "schedules":
-      renderPlaceholder(viewHost, "schedulesTitle");
+      renderAutomation(viewHost, actions);
       break;
     default:
       renderHome(viewHost, actions);
@@ -343,6 +347,9 @@ function comingSoon() {
 
 function onMessage(msg) {
   switch (msg.type) {
+    case "work:updated":
+      refreshWork();
+      break;
     case "permissions":
       permissionSnapshot(msg.data ?? []);
       break;
@@ -364,6 +371,7 @@ function onMessage(msg) {
     }
     case "credentials":
       patch({ credentials: msg.data });
+      refreshWork();
       modals?.renderCredentials();
       break;
     case "settings:ack":
@@ -434,6 +442,7 @@ function onMessage(msg) {
       break;
     }
     case "mission:summary": {
+      refreshWork();
       const summary = msg.summary;
       if (
         summary?.id === state.currentConversationId &&
@@ -473,7 +482,7 @@ function onMessage(msg) {
 function applyTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
   const btn = document.getElementById("theme-toggle");
-  if (btn) btn.textContent = theme === "dark" ? "Light" : "Dark";
+  if (btn) btn.textContent = theme === "dark" ? t("themeLight") : t("themeDark");
 }
 
 function initTheme() {
@@ -508,14 +517,14 @@ function toggleLang() {
 
 function buildCommands() {
   const commands = [
-    { label: t("cmdRunMission"), run: () => actions.setView("workspace") },
+    { label: t("cmdRunMission"), run: () => actions.newTask() },
     { label: t("cmdNewProject"), run: () => modals?.openNewProject() },
     { label: t("cmdNewConversation"), run: newConversation },
     { label: t("cmdGoHome"), run: () => actions.setView("home") },
     { label: t("cmdShowDiff"), run: () => switchInspectorTab("diff") },
-    { label: t("cmdRunTests"), run: comingSoon },
-    { label: t("cmdCreateCheckpoint"), run: comingSoon },
-    { label: t("cmdAskRepo"), run: comingSoon },
+    { label: t("cmdRunTests"), run: () => setView("missions") },
+    { label: t("cmdCreateCheckpoint"), run: () => setView("worktrees") },
+    { label: t("cmdAskRepo"), run: () => setView("intelligence") },
     ...["manual", "assisted", "autonomous"].map((mode) => ({
       label: `${t("cmdChangeAutonomy")}: ${t(`autonomy${mode}`)}`,
       run: () => actions.setAutonomy(mode),
@@ -662,3 +671,27 @@ async function boot() {
 }
 
 void boot();
+
+function renderMobileNav() {
+  let nav = document.querySelector(".mobile-nav");
+  if (!nav) {
+    nav = document.createElement("nav");
+    nav.className = "mobile-nav";
+    document.getElementById("center").prepend(nav);
+  }
+  nav.setAttribute("aria-label", t("workspace"));
+  nav.replaceChildren();
+  for (const [key, run] of [
+    ["navHome", () => setView("home")],
+    ["navTasks", () => setView("tasks")],
+    ["navAgents", () => setView("agents")],
+    ["navSchedules", () => setView("schedules")],
+    ["newProject", actions.openNewProject],
+    ["settings", actions.openSettings],
+  ]) {
+    const button = document.createElement("button");
+    button.textContent = t(key);
+    button.onclick = run;
+    nav.append(button);
+  }
+}

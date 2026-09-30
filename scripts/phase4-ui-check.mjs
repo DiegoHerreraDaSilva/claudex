@@ -184,6 +184,11 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ ok: true }));
       return;
     }
+    if (url.pathname === "/api/work/overview") {
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ tasks: [], schedules: [], timeZone: "UTC", schedulerError: null }));
+      return;
+    }
     const payload =
       url.pathname === "/api/projects"
         ? [project]
@@ -325,8 +330,10 @@ app.whenReady().then(async () => {
     await evaluate(
       "{ const entry = [...document.querySelectorAll('.tool-card')].find(node => node.querySelector('textarea')?.value === 'Use ESM'); entry.querySelector('textarea').value = 'Use ESM updated'; entry.querySelector('.tool-actions button').click(); }",
     );
-    await waitFor(() => memories.some(entry => entry.text === "Use ESM updated"));
-    await waitFor("[...document.querySelectorAll('.tool-card:has(.tool-actions) textarea')].some(node => node.value === 'Use ESM updated')");
+    await waitFor(() => memories.some((entry) => entry.text === "Use ESM updated"));
+    await waitFor(
+      "[...document.querySelectorAll('.tool-card:has(.tool-actions) textarea')].some(node => node.value === 'Use ESM updated')",
+    );
     await evaluate(
       "{ const entry = [...document.querySelectorAll('.tool-card')].find(node => node.querySelector('.tool-actions') && node.querySelector('textarea')?.value === 'Local JSON persistence'); entry.querySelectorAll('.tool-actions button')[1].click(); }",
     );

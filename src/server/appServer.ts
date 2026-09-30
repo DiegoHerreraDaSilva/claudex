@@ -1,3 +1,5 @@
+import { WorkService } from "../application/workService.js";
+import { workRoutes } from "./workRoutes.js";
 import { projectToolsRoutes } from "./projectTools.js";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { existsSync } from "node:fs";
@@ -56,6 +58,7 @@ export function createAppServer(options: AppServerOptions): AppServer {
       const url = new URL(req.url ?? "/", "http://localhost");
       const method = req.method ?? "GET";
 
+      if (await automationRoute(req, res, url)) return;
       if (await toolsRoute(req, res, url)) return;
 
       if (url.pathname === "/health") {
@@ -190,6 +193,16 @@ export function createAppServer(options: AppServerOptions): AppServer {
       if (client.readyState === WebSocket.OPEN) client.send(encoded);
     }
   };
+
+  const work = new WorkService(
+    chat,
+    registry,
+    config.dataDir,
+    () => broadcast(envelope({ type: "work:updated" })),
+    () => getCredentialStatus(config).claude.mode !== "none",
+  );
+  const automationRoute = workRoutes(work, chat, registry, () => getCredentialStatus(config));
+  server.on("close", () => work.stopScheduler());
 
   const toolsRoute = projectToolsRoutes(
     chat,
@@ -330,11 +343,13 @@ export function createAppServer(options: AppServerOptions): AppServer {
   return {
     server,
     wss,
-    listen(port: number): Promise<number> {
+    async listen(port: number): Promise<number> {
+      await work.initialize();
       return new Promise<number>((resolve, reject) => {
         server.once("error", reject);
         server.listen(port, "127.0.0.1", () => {
           const address = server.address();
+          void work.startScheduler().catch(() => work.stopScheduler());
           resolve(typeof address === "object" && address ? address.port : port);
         });
       });

@@ -69,7 +69,7 @@ function renderHeader(project, conversation) {
     metric(t("tabFiles"), String(diff?.files?.length ?? 0)),
     metric(t("autonomy"), t(`autonomy${conversation.autonomy ?? "autonomous"}`)),
   );
-  header.appendChild(metrics);
+  header.appendChild(el("details", {}, [el("summary", { text: t("workTechnical") }), metrics]));
   return header;
 }
 

@@ -112,16 +112,21 @@ function renderNav(title, items, actions) {
   for (const item of items) {
     const active = state.view === item.view;
     group.appendChild(
-      el("button", {
-        class: `nav-item${active ? " active" : ""}`,
-        onclick: () => actions.setView(item.view),
-      }, [
-        el("span", { class: "nav-icon", text: item.icon }),
-        el("span", { class: "nav-text", text: t(item.label) }),
-        item.view === "workspace" && currentProject()?.running
-          ? el("span", { class: "nav-badge", text: "●" })
-          : null,
-      ]),
+      el(
+        "button",
+        {
+          class: `nav-item${active ? " active" : ""}`,
+          dataset: { view: item.view },
+          onclick: () => actions.setView(item.view),
+        },
+        [
+          el("span", { class: "nav-icon", text: item.icon }),
+          el("span", { class: "nav-text", text: t(item.label) }),
+          item.view === "workspace" && currentProject()?.running
+            ? el("span", { class: "nav-badge", text: "●" })
+            : null,
+        ],
+      ),
     );
   }
   return group;
@@ -134,7 +139,10 @@ function renderSystem(actions) {
     el("button", { class: "nav-item", onclick: () => actions.openSettings() }, [
       el("span", { class: "nav-icon", text: "⚙" }),
       el("span", { class: "nav-text", text: t("settings") }),
-      el("span", { class: "nav-icon dot-warn", text: state.credentials && credentialsWarn() ? "●" : "" }),
+      el("span", {
+        class: "nav-icon dot-warn",
+        text: state.credentials && credentialsWarn() ? "●" : "",
+      }),
     ]),
   );
   return group;
