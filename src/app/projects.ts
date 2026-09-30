@@ -28,6 +28,7 @@ export interface Conversation {
   worktreePath?: string;
   usage?: { inputTokens: number; outputTokens: number; runs: number };
   costUsd?: number;
+  validationRequired?: boolean;
 }
 
 export interface Project {
@@ -49,6 +50,7 @@ export interface ConversationSummary {
   activeAgent?: string;
   branch?: string;
   costUsd?: number;
+  validationRequired?: boolean;
 }
 
 export interface ProjectSummary {
@@ -254,6 +256,7 @@ export class ProjectRegistry {
         ...(conversation.activeAgent ? { activeAgent: conversation.activeAgent } : {}),
         ...(conversation.branch ? { branch: conversation.branch } : {}),
         ...(conversation.costUsd ? { costUsd: conversation.costUsd } : {}),
+        ...(conversation.validationRequired ? { validationRequired: true } : {}),
       }));
       return {
         id: project.id,

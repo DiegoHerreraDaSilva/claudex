@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseDiffFiles } from "../src/domain/diff.ts";
+import { diffStats, parseDiffFiles } from "../src/domain/diff.ts";
 
 const DIFF = [
   "diff --git a/src/auth/token.ts b/src/auth/token.ts",
@@ -23,4 +23,9 @@ describe("parseDiffFiles", () => {
   it("returns an empty list for an empty diff", () => {
     expect(parseDiffFiles("")).toEqual([]);
   });
+});
+
+it("counts only hunk lines including content beginning with repeated plus signs", () => {
+  const diff = "diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1 +1,2 @@\n-before\n+after\n+++content";
+  expect(diffStats(diff)).toEqual({ additions: 2, deletions: 1 });
 });

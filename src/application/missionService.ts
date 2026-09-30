@@ -16,12 +16,17 @@ import {
   diffAgainst,
   hasCommits,
   removeWorktree,
+  runGit,
 } from "../app/git.js";
 import type { ChatRole, Conversation, Project, ProjectRegistry } from "../app/projects.js";
 import type { OrchestratorConfig } from "../config.js";
 import type { AgentRun, TokenUsage } from "../domain/agent.js";
-import { parseDiffFiles } from "../domain/diff.js";
+import { diffStats, parseDiffFiles } from "../domain/diff.js";
 import type { MissionEventInput, TaskEvent } from "../domain/event.js";
+import type { MissionSummary } from "../domain/missionSummary.js";
+import { verifyMission } from "./verificationService.js";
+import { reviewMission } from "./reviewService.js";
+import { validateMission } from "./missionValidation.js";
 import type { EventStore } from "../infrastructure/persistence/eventStore.js";
 import { estimateCostUsd } from "../infrastructure/pricing.js";
 import { JevClient } from "../jev.js";
@@ -42,6 +47,7 @@ export interface MissionChannel {
   routing(event: MissionRoutingEvent): void;
   diff(diff: string, files: string[], branch: string, baseBranch: string): void;
   event(event: TaskEvent): void;
+  summary(summary: MissionSummary): void;
 }
 
 export interface MissionRunInput {
@@ -92,6 +98,21 @@ export class MissionService {
   }
 
   async run(input: MissionRunInput): Promise<void> {
+    try {
+      await this.execute(input);
+    } catch (err) {
+      await this.record(input.conversationId, input.channel, {
+        type: input.signal.aborted ? "mission:stopped" : "mission:failed",
+        level: input.signal.aborted ? "warn" : "error",
+        message: input.signal.aborted ? "Mission interrupted" : err instanceof Error ? err.message : String(err),
+      });
+      throw err;
+    } finally {
+      this.lastAssistantText.delete(input.conversationId);
+    }
+  }
+
+  private async execute(input: MissionRunInput): Promise<void> {
     const { projectId, conversationId, text, signal, channel } = input;
     const project = this.registry.get(projectId);
     const conversation = this.registry.getConversation(projectId, conversationId);
@@ -101,10 +122,14 @@ export class MissionService {
       type: "mission:started",
       level: "info",
       message: text,
+      payload: { projectId },
     });
 
     const { worktreePath, baseBranch, branch } = await this.ensureWorktree(project, conversation, channel);
+    signal.throwIfAborted();
     const route = await this.jev.routeTask(text);
+    signal.throwIfAborted();
+    let plan = text;
 
     if (route.route === "implement") {
       channel.routing({
@@ -162,18 +187,29 @@ export class MissionService {
         payload: { route: route.route, confidence: route.confidence, source: route.source },
       });
 
-      await this.runPlanner({ projectId, conversationId, channel, worktreePath, text, signal });
+      plan = await this.runPlanner({ projectId, conversationId, channel, worktreePath, text, signal });
     }
 
-    await commitAll(worktreePath, text);
-    const diff = await diffAgainst(worktreePath, baseBranch);
-    const files = parseDiffFiles(diff);
-    channel.diff(diff, files, branch, baseBranch);
-    await this.record(conversationId, channel, {
-      type: "diff:created",
-      level: files.length > 0 ? "success" : "info",
-      message: `${files.length} arquivo(s) alterado(s)`,
-      payload: { files, branch, baseBranch },
+    await validateMission({ signal }, {
+      captureDiff: async () => {
+        signal.throwIfAborted();
+        await commitAll(worktreePath, text);
+        const diff = await diffAgainst(worktreePath, baseBranch);
+        const files = parseDiffFiles(diff);
+        const head = (await runGit(worktreePath, ["rev-parse", "HEAD"])).stdout.trim();
+        channel.diff(diff, files, branch, baseBranch);
+        await this.record(conversationId, channel, {
+          type: "diff:created", level: files.length > 0 ? "success" : "info",
+          message: `${files.length} arquivo(s) alterado(s)`,
+          payload: { files, branch, baseBranch, head, ...diffStats(diff) },
+        });
+        return diff;
+      },
+      verify: () => verifyMission({ missionId: conversationId, worktreePath, signal, timeoutMs: this.config.agentTimeoutMs, onEvent: event => this.record(conversationId, channel, event) }),
+      review: diff => reviewMission({ missionId: conversationId, worktreePath, diff, plan, signal, timeoutMs: this.config.agentTimeoutMs }, { jev: this.jev }),
+      correct: prompt => this.correct(input, worktreePath, prompt),
+      record: event => this.record(conversationId, channel, event),
+      onReviewUsage: (run, startedAt) => this.addUsage(projectId, conversationId, channel, { label: "claude:opus (reviewer)", model: "opus", usage: run.usage, startedAt }),
     });
     await this.record(conversationId, channel, {
       type: "mission:completed",
@@ -189,7 +225,7 @@ export class MissionService {
     worktreePath: string;
     text: string;
     signal: AbortSignal;
-  }): Promise<void> {
+  }): Promise<string> {
     const { projectId, conversationId, channel, worktreePath, text, signal } = args;
     const startedAt = Date.now();
     await this.record(conversationId, channel, {
@@ -285,6 +321,22 @@ export class MissionService {
         maxTurns: 30,
         signal,
       });
+    }
+    return plan.plan;
+  }
+
+  private async correct(input: MissionRunInput, worktreePath: string, prompt: string): Promise<void> {
+    const { projectId, conversationId, channel, signal } = input;
+    const conversation = this.registry.getConversation(projectId, conversationId);
+    if (conversation?.activeAgent?.startsWith("codex:")) {
+      const label = conversation.activeAgent;
+      const startedAt = Date.now();
+      await this.record(conversationId, channel, { type: "agent:started", level: "info", message: `${label} (correction)`, payload: { role: "implementer" } });
+      const run = await runCodexAgent({ prompt, worktreePath, model: this.config.defaultComplexModel, timeoutMs: this.config.agentTimeoutMs, signal, resumeThreadId: conversation.codexThreadId, onEvent: event => this.streamCodex(conversationId, channel, event) });
+      await this.registry.updateConversation(projectId, conversationId, { codexThreadId: run.threadId });
+      await this.addUsage(projectId, conversationId, channel, { label, model: this.config.defaultComplexModel, usage: run.usage, startedAt });
+    } else {
+      await this.runClaude({ projectId, conversationId, channel, signal, worktreePath, prompt, model: "sonnet", label: "claude:sonnet (correction)", tools: [...CLAUDE_TOOLS.implementer], maxTurns: 20, sessionId: conversation?.claudeSessionId });
     }
   }
 
@@ -421,6 +473,8 @@ export class MissionService {
     try {
       const stored = await this.events.append(missionId, event);
       channel.event(stored);
+      const summary = await this.events.readSummary(missionId);
+      if (summary) channel.summary(summary);
     } catch {
       // best effort — never break a mission because the log failed
     }

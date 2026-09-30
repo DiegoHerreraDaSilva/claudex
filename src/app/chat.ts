@@ -6,6 +6,7 @@ import type { MissionChannel } from "../application/missionService.js";
 import { buildPreview, type MissionPreview } from "../application/missionPreview.js";
 import type { OrchestratorConfig } from "../config.js";
 import { parseDiffFiles } from "../domain/diff.js";
+import type { MissionSummary } from "../domain/missionSummary.js";
 import type { TaskEvent } from "../domain/event.js";
 import { TypedEmitter } from "../events.js";
 import { EventStore } from "../infrastructure/persistence/eventStore.js";
@@ -18,6 +19,7 @@ import {
   mergeBranch,
   removeWorktree,
   resetHard,
+  runGit,
 } from "./git.js";
 import {
   ProjectRegistry,
@@ -56,6 +58,7 @@ export interface ChatEvents {
   };
   "chat:diff": ChatDiff;
   "mission:event": TaskEvent;
+  "mission:summary": MissionSummary;
 }
 
 export interface ConversationDiff {
@@ -106,6 +109,12 @@ export class ChatService extends TypedEmitter<ChatEvents> {
     return this.store.read(missionId);
   }
 
+  async missionSummary(missionId: string): Promise<MissionSummary | undefined> {
+    const project = this.registry.list().find(item => item.conversations.some(conversation => conversation.id === missionId));
+    if (!project) return undefined;
+    return this.store.readSummary(missionId);
+  }
+
   async preview(text: string): Promise<MissionPreview> {
     const [route, complexity] = await Promise.all([
       this.jev.routeTask(text),
@@ -152,10 +161,7 @@ export class ChatService extends TypedEmitter<ChatEvents> {
     if (!project || !conversation) throw new Error("project or conversation not found");
     if (this.running.has(conversationId)) throw new Error("this conversation is already running");
 
-    await this.push(projectId, conversationId, "user", text);
     this.running.add(conversationId);
-    this.emitProjects();
-    this.emit("chat:turn", { projectId, conversationId, status: "started" });
 
     const controller = new AbortController();
     this.aborts.set(conversationId, controller);
@@ -171,9 +177,14 @@ export class ChatService extends TypedEmitter<ChatEvents> {
         this.emit("chat:diff", chatDiff);
       },
       event: (event) => this.emit("mission:event", event),
+      summary: summary => this.emit("mission:summary", summary),
     };
 
     try {
+      await this.registry.updateConversation(projectId, conversationId, { validationRequired: true });
+      await this.push(projectId, conversationId, "user", text);
+      this.emitProjects();
+      this.emit("chat:turn", { projectId, conversationId, status: "started" });
       await this.missions.run({
         projectId,
         conversationId,
@@ -215,6 +226,13 @@ export class ChatService extends TypedEmitter<ChatEvents> {
     if (!project || !conversation || !conversation.branch || !project.baseBranch) {
       return { ok: false, reason: "conversation has no branch yet" };
     }
+    if (this.running.has(conversationId)) return { ok: false, reason: "mission is still running" };
+    const summary = await this.missionSummary(conversationId);
+    if ((conversation.validationRequired && !summary) || (summary && summary.status !== "ready")) return { ok: false, reason: "mission has not passed verification and review" };
+    if (summary?.head) {
+      const head = (await runGit(project.rootPath, ["rev-parse", conversation.branch])).stdout.trim();
+      if (head !== summary.head) return { ok: false, reason: "mission branch changed after review; run a new validation" };
+    }
     const current = await currentBranch(project.rootPath);
     if (current !== project.baseBranch) {
       await this.push(projectId, conversationId, "system", `checkout ${project.baseBranch} (was ${current})`);
@@ -224,6 +242,7 @@ export class ChatService extends TypedEmitter<ChatEvents> {
     if (result.ok) {
       await this.push(projectId, conversationId, "system", `applied ${conversation.branch} into ${project.baseBranch}`);
       this.diffs.delete(conversationId);
+      await this.recordAction(conversationId, "mission:applied", "Changes applied");
       this.emit("chat:diff", {
         projectId,
         conversationId,
@@ -245,7 +264,9 @@ export class ChatService extends TypedEmitter<ChatEvents> {
     if (!project || !conversation || !conversation.worktreePath || !project.baseBranch) {
       return { ok: false, reason: "nothing to discard" };
     }
+    if (this.running.has(conversationId)) return { ok: false, reason: "mission is still running" };
     await resetHard(conversation.worktreePath, project.baseBranch);
+    await this.recordAction(conversationId, "mission:stopped", "Changes discarded");
     this.diffs.delete(conversationId);
     await this.push(projectId, conversationId, "system", "discarded pending changes");
     this.emit("chat:diff", {
@@ -282,6 +303,13 @@ export class ChatService extends TypedEmitter<ChatEvents> {
     }
     await this.registry.remove(projectId);
     this.emitProjects();
+  }
+
+  private async recordAction(missionId: string, type: "mission:applied" | "mission:stopped", message: string): Promise<void> {
+    const event = await this.store.append(missionId, { type, level: "info", message });
+    this.emit("mission:event", event);
+    const summary = await this.store.readSummary(missionId);
+    if (summary) this.emit("mission:summary", summary);
   }
 
   private async push(

@@ -7,3 +7,16 @@ export function parseDiffFiles(diff: string): string[] {
   }
   return [...files];
 }
+
+export function diffStats(diff: string): { additions: number; deletions: number } {
+  let additions = 0;
+  let deletions = 0;
+  let inHunk = false;
+  for (const line of diff.split(/\r?\n/)) {
+    if (line.startsWith("diff --git ")) inHunk = false;
+    else if (line.startsWith("@@ ")) inHunk = true;
+    else if (inHunk && line.startsWith("+")) additions++;
+    else if (inHunk && line.startsWith("-")) deletions++;
+  }
+  return { additions, deletions };
+}

@@ -131,6 +131,12 @@ export function createAppServer(options: AppServerOptions): AppServer {
         return json(res, 200, await listDirectory(url.searchParams.get("path") ?? ""));
       }
 
+      const missionSummaryMatch = /^\/api\/missions\/([^/]+)\/summary$/.exec(url.pathname);
+      if (missionSummaryMatch?.[1] && method === "GET") {
+        const summary = await chat.missionSummary(decodeURIComponent(missionSummaryMatch[1]));
+        return summary ? json(res, 200, summary) : json(res, 404, { error: "mission not found" });
+      }
+
       const missionEventsMatch = /^\/api\/missions\/([^/]+)\/events$/.exec(url.pathname);
       if (missionEventsMatch?.[1] && method === "GET") {
         const missionId = decodeURIComponent(missionEventsMatch[1]);
@@ -181,6 +187,7 @@ export function createAppServer(options: AppServerOptions): AppServer {
   chat.on("chat:routing", (data) => broadcast(envelope({ type: "chat:routing", ...data })));
   chat.on("chat:turn", (data) => broadcast(envelope({ type: "chat:turn", ...data })));
   chat.on("chat:diff", (data) => broadcast(envelope({ type: "chat:diff", ...data })));
+  chat.on("mission:summary", summary => broadcast(envelope({ type: "mission:summary", summary })));
   chat.on("mission:event", (data) => broadcast(envelope({ type: "mission:event", event: data })));
 
   wss.on("connection", (socket: WebSocket) => {
@@ -237,7 +244,9 @@ export function createAppServer(options: AppServerOptions): AppServer {
             : parsed.action === "discard"
               ? chat.discard(projectId, conversationId)
               : Promise.resolve({ ok: false, reason: "unknown action" });
-        void run.catch(() => undefined);
+        void run.then(result => socket.send(JSON.stringify(envelope({ type: "chat:action:result", projectId, conversationId, ...result })))).catch((err: unknown) => {
+          socket.send(JSON.stringify(envelope({ type: "chat:action:result", projectId, conversationId, ok: false, reason: err instanceof Error ? err.message : String(err) })));
+        });
         return;
       }
       if (parsed.type === "conversation:create" && parsed.projectId) {
