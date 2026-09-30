@@ -15,6 +15,36 @@ process.env["CLAUDEX_ROOT"] = repoRoot;
 
 let mainWindow = null;
 let appServer = null;
+let autoUpdater = null;
+
+const isDev = !app.isPackaged;
+
+function sendUpdateStatus(payload) {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("update-status", payload);
+}
+
+function setupAutoUpdate() {
+  if (isDev) return;
+  autoUpdater = updater.autoUpdater;
+  autoUpdater.autoDownload = true;
+  autoUpdater.on("checking-for-update", () => sendUpdateStatus({ status: "checking" }));
+  autoUpdater.on("update-available", (info) => sendUpdateStatus({ status: "available", version: info?.version }));
+  autoUpdater.on("update-not-available", () => sendUpdateStatus({ status: "none" }));
+  autoUpdater.on("download-progress", (p) => sendUpdateStatus({ status: "downloading", percent: Math.round(p?.percent ?? 0) }));
+  autoUpdater.on("update-downloaded", (info) => sendUpdateStatus({ status: "downloaded", version: info?.version }));
+  autoUpdater.on("error", (err) => sendUpdateStatus({ status: "error", message: err?.message ?? String(err) }));
+  autoUpdater.checkForUpdatesAndNotify().catch(() => undefined);
+}
+
+ipcMain.handle("check-updates", async () => {
+  if (isDev || !autoUpdater) return { status: "dev" };
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    return { status: "checking", version: result?.updateInfo?.version ?? null };
+  } catch (err) {
+    return { status: "error", message: err?.message ?? String(err) };
+  }
+});
 
 async function start() {
   process.env["CLAUDEX_DATA_DIR"] = app.getPath("userData");
@@ -48,16 +78,6 @@ async function start() {
   });
 
   setupAutoUpdate();
-}
-
-function setupAutoUpdate() {
-  if (!app.isPackaged) return;
-  const { autoUpdater } = updater;
-  autoUpdater.autoDownload = true;
-  autoUpdater.on("error", (err) => console.error("auto-update error:", err?.message ?? err));
-  autoUpdater
-    .checkForUpdatesAndNotify()
-    .catch((err) => console.error("auto-update check failed:", err?.message ?? err));
 }
 
 ipcMain.handle("pick-folder", async () => {

@@ -65,6 +65,14 @@ const I18N = {
     refresh: "atualizar",
     tokensLabel: "tokens (Claude + Codex)",
     planLabel: "plano",
+    appUpdates: "atualizações",
+    checkUpdates: "verificar atualizações",
+    updateChecking: "verificando...",
+    updateAvailable: "versão {version} disponível — baixando",
+    updateNone: "você está na versão mais recente",
+    updateDownloaded: "versão {version} baixada — reinicie para aplicar",
+    updateError: "erro ao verificar",
+    updateDev: "disponível só no app instalado",
   },
   en: {
     newProject: "+ new project",
@@ -132,6 +140,14 @@ const I18N = {
     refresh: "refresh",
     tokensLabel: "tokens (Claude + Codex)",
     planLabel: "plan",
+    appUpdates: "updates",
+    checkUpdates: "check for updates",
+    updateChecking: "checking...",
+    updateAvailable: "version {version} available — downloading",
+    updateNone: "you are on the latest version",
+    updateDownloaded: "version {version} downloaded — restart to apply",
+    updateError: "check failed",
+    updateDev: "packaged app only",
   },
 };
 
@@ -568,6 +584,43 @@ function renderUsage(data) {
   els.usageStatus.innerHTML = parts.join("");
 }
 
+function renderUpdateStatus(data) {
+  if (!data || !els.updateStatus) return;
+  const status = data.status;
+  let text = "";
+  let cls = "settings-msg";
+  if (status === "checking") text = t("updateChecking");
+  else if (status === "available") text = t("updateAvailable", { version: data.version ?? "" });
+  else if (status === "downloading")
+    text = `${t("updateAvailable", { version: data.version ?? "" })} ${data.percent ?? 0}%`;
+  else if (status === "none") {
+    text = t("updateNone");
+    cls = "settings-msg ok";
+  } else if (status === "downloaded") {
+    text = t("updateDownloaded", { version: data.version ?? "" });
+    cls = "settings-msg ok";
+  } else if (status === "error") {
+    text = `${t("updateError")}: ${data.message ?? ""}`;
+    cls = "settings-msg err";
+  } else if (status === "dev") text = t("updateDev");
+  els.updateStatus.textContent = text;
+  els.updateStatus.className = cls;
+}
+
+function setupUpdates() {
+  const field = els.updateField;
+  if (!window.claudexApp?.checkForUpdates || !field) return;
+  field.style.display = "";
+  window.claudexApp.onUpdateStatus((data) => renderUpdateStatus(data));
+  els.checkUpdates.addEventListener("click", async () => {
+    els.updateStatus.textContent = t("updateChecking");
+    els.updateStatus.className = "settings-msg";
+    const result = await window.claudexApp.checkForUpdates();
+    if (result?.status === "dev") renderUpdateStatus({ status: "dev" });
+    else if (result?.status === "error") renderUpdateStatus(result);
+  });
+}
+
 function sendMessage() {
   const text = els.input.value.trim();
   if (!text || !state.currentConversationId) return;
@@ -998,6 +1051,7 @@ els.transcript.addEventListener("scroll", () => {
 lang = localStorage.getItem(LANG_KEY) === "en" ? "en" : "pt";
 initTheme();
 applyStatic();
+setupUpdates();
 loadProjects();
 loadCredentials();
 render();
