@@ -3,10 +3,13 @@ import { applyStatic, getLang, initLang, setLang, t, THEME_KEY } from "./lib/i18
 import { initSocket, isConnected, send as socketSend } from "./lib/socket.js";
 import { currentConversation, currentProject, notify, patch, state, subscribe } from "./lib/store.js";
 import { initPalette, openPalette, paletteOpen, closePalette } from "./components/commandPalette.js";
+import { confirmModal } from "./components/confirm.js";
+import { previewModal } from "./components/previewModal.js";
 import { toast } from "./components/toast.js";
 import { initModals } from "./views/modals.js";
 import { renderHome } from "./views/home.js";
 import { renderInspector } from "./views/inspector.js";
+import { renderMissionCenter } from "./views/missionCenter.js";
 import { renderPlaceholder } from "./views/placeholder.js";
 import { renderSidebar } from "./views/sidebar.js";
 import { renderWorkspace } from "./views/workspace.js";
@@ -40,6 +43,7 @@ function renderAll() {
 }
 
 function renderView() {
+  if (state.view === "missions" || state.view === "workspace") ensureMissionEvents();
   switch (state.view) {
     case "home":
       renderHome(viewHost, actions);
@@ -48,7 +52,7 @@ function renderView() {
       renderWorkspace(viewHost, actions);
       break;
     case "missions":
-      renderPlaceholder(viewHost, "missionsTitle");
+      renderMissionCenter(viewHost, actions);
       break;
     case "worktrees":
       renderPlaceholder(viewHost, "worktreesTitle");
@@ -90,6 +94,18 @@ async function loadSnapshot(projectId) {
   } catch {
     /* ignore */
   }
+}
+
+function ensureMissionEvents() {
+  const conversationId = state.currentConversationId;
+  if (!conversationId || state.missionEventsFor === conversationId) return;
+  patch({ missionEvents: [], missionEventsFor: conversationId });
+  api
+    .getMissionEvents(conversationId)
+    .then((events) => {
+      if (state.currentConversationId === conversationId) patch({ missionEvents: events });
+    })
+    .catch(() => undefined);
 }
 
 async function selectProject(projectId) {
@@ -162,6 +178,17 @@ async function startMission(text) {
     toast(t("emptySelect"));
     return;
   }
+  const preview = await api.previewMission(text).catch(() => null);
+  if (!preview) {
+    await beginMission(text);
+    return;
+  }
+  previewModal(preview, text, () => void beginMission(text));
+}
+
+async function beginMission(text) {
+  const project = currentProject();
+  if (!project) return;
   let conversationId = state.currentConversationId ?? project.activeConversationId ?? project.conversations?.[0]?.id;
   if (!conversationId) {
     socketSend({ type: "conversation:create", projectId: project.id });
@@ -193,7 +220,16 @@ function stop() {
   const project = currentProject();
   const conversation = currentConversation();
   if (!project || !conversation) return;
-  socketSend({ type: "chat:stop", projectId: project.id, conversationId: conversation.id });
+  if (!state.running.has(conversation.id)) return;
+  confirmModal({
+    title: t("interruptTitle"),
+    body: t("interruptBody"),
+    confirmLabel: t("interrupt"),
+    cancelLabel: t("cancel"),
+    danger: true,
+    onConfirm: () =>
+      socketSend({ type: "chat:stop", projectId: project.id, conversationId: conversation.id }),
+  });
 }
 
 function chatAction(action) {
@@ -283,8 +319,13 @@ function onMessage(msg) {
     }
     case "mission:event": {
       const event = msg.event;
-      if (event?.type === "router:decided") {
-        state.route = { stage: event.payload?.route === "plan" ? "plan" : "implement" };
+      if (!event) break;
+      if (event.missionId === state.currentConversationId) {
+        state.missionEvents = [...state.missionEvents, event];
+        if (event.type === "router:decided") {
+          state.route = { stage: event.payload?.route === "plan" ? "plan" : "implement" };
+        }
+        notify();
       }
       break;
     }

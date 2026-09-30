@@ -3,6 +3,7 @@ import path from "node:path";
 import { v4 as uuid } from "uuid";
 import { MissionService } from "../application/missionService.js";
 import type { MissionChannel } from "../application/missionService.js";
+import { buildPreview, type MissionPreview } from "../application/missionPreview.js";
 import type { OrchestratorConfig } from "../config.js";
 import { parseDiffFiles } from "../domain/diff.js";
 import type { TaskEvent } from "../domain/event.js";
@@ -103,6 +104,14 @@ export class ChatService extends TypedEmitter<ChatEvents> {
 
   async missionEvents(missionId: string): Promise<TaskEvent[]> {
     return this.store.read(missionId);
+  }
+
+  async preview(text: string): Promise<MissionPreview> {
+    const [route, complexity] = await Promise.all([
+      this.jev.routeTask(text),
+      this.jev.classifyComplexity(text),
+    ]);
+    return buildPreview(route, complexity, this.config);
   }
 
   async snapshot(projectId: string): Promise<ChatSnapshot | null> {

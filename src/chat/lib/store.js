@@ -12,6 +12,8 @@ export const state = {
   autoscroll: true,
   browser: { path: "", parent: null },
   route: null,
+  missionEvents: [],
+  missionEventsFor: null,
   palette: { open: false, mode: "commands", query: "" },
 };
 

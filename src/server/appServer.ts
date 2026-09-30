@@ -121,6 +121,12 @@ export function createAppServer(options: AppServerOptions): AppServer {
         const rootPath = (body.rootPath ?? "").trim();
         return json(res, 200, { isGitRepo: rootPath ? await isGitRepo(rootPath) : false });
       }
+      if (url.pathname === "/api/preview" && method === "POST") {
+        const body = (await readBody(req)) as { text?: string };
+        const text = (body.text ?? "").trim();
+        if (!text) return json(res, 400, { error: "text is required" });
+        return json(res, 200, await chat.preview(text));
+      }
       if (url.pathname === "/api/fs/list" && method === "GET") {
         return json(res, 200, await listDirectory(url.searchParams.get("path") ?? ""));
       }

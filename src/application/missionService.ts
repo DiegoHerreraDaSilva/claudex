@@ -55,6 +55,7 @@ export interface MissionRunInput {
 const planSchema = z.object({
   complexity: z.enum(["complex", "simple"]),
   plan: z.string(),
+  subtasks: z.array(z.string()).optional(),
 });
 
 const PLAN_JSON_SCHEMA = (() => {
@@ -191,6 +192,12 @@ export class MissionService {
   }): Promise<void> {
     const { projectId, conversationId, channel, worktreePath, text, signal } = args;
     const startedAt = Date.now();
+    await this.record(conversationId, channel, {
+      type: "agent:started",
+      level: "info",
+      message: "claude:opus (planner)",
+      payload: { label: "claude:opus", model: "opus", role: "planner" },
+    });
     const planner = await runClaudeAgent({
       prompt: buildPlannerPrompt(text),
       model: "opus",
@@ -212,7 +219,7 @@ export class MissionService {
       type: "plan:created",
       level: "info",
       message: plan.plan,
-      payload: { complexity: plan.complexity },
+      payload: { complexity: plan.complexity, subtasks: plan.subtasks },
     });
     const workerPrompt = `${text}\n\nPlano aprovado:\n${plan.plan}`;
     await channel.message("assistant", plan.plan);
@@ -230,6 +237,12 @@ export class MissionService {
       });
       await channel.message("routing", `Opus: feature complexa -> ${this.config.defaultComplexModel}`, undefined, "plan.complex");
       const started = Date.now();
+      await this.record(conversationId, channel, {
+        type: "agent:started",
+        level: "info",
+        message: label,
+        payload: { label, model: this.config.defaultComplexModel, role: "implementer" },
+      });
       const run = await runCodexAgent({
         prompt: workerPrompt,
         worktreePath,
@@ -289,6 +302,12 @@ export class MissionService {
     signal: AbortSignal;
   }): Promise<void> {
     const startedAt = Date.now();
+    await this.record(args.conversationId, args.channel, {
+      type: "agent:started",
+      level: "info",
+      message: args.label,
+      payload: { label: args.label, model: args.model, role: "implementer" },
+    });
     const run = await runClaudeAgent({
       prompt: args.prompt,
       model: args.model,
@@ -474,27 +493,35 @@ function buildPlannerPrompt(task: string): string {
   return [
     "Voce e um arquiteto de software. Analise a tarefa e produza um plano de implementacao conciso.",
     "Decida se e uma FEATURE COMPLEXA (multiplos arquivos, integracoes, logica densa) ou uma FEATURE MAIS SIMPLES (mudanca focada).",
-    'Responda APENAS com JSON valido no formato: { "complexity": "complex" | "simple", "plan": string }',
+    "Liste de 1 a 6 subtarefas curtas que representam o trabalho.",
+    'Responda APENAS com JSON valido no formato: { "complexity": "complex" | "simple", "plan": string, "subtasks": string[] }',
     "",
     `Tarefa: ${task}`,
   ].join("\n");
 }
 
-function parsePlan(text: string): { complexity: "complex" | "simple"; plan: string } {
+function parsePlan(text: string): { complexity: "complex" | "simple"; plan: string; subtasks: string[] } {
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start !== -1 && end > start) {
     try {
-      const parsed = JSON.parse(text.slice(start, end + 1)) as { complexity?: unknown; plan?: unknown };
+      const parsed = JSON.parse(text.slice(start, end + 1)) as {
+        complexity?: unknown;
+        plan?: unknown;
+        subtasks?: unknown;
+      };
       return {
         complexity: parsed.complexity === "complex" ? "complex" : "simple",
         plan: typeof parsed.plan === "string" ? parsed.plan : text,
+        subtasks: Array.isArray(parsed.subtasks)
+          ? parsed.subtasks.filter((item): item is string => typeof item === "string").slice(0, 8)
+          : [],
       };
     } catch {
       // fall through
     }
   }
-  return { complexity: "simple", plan: text.slice(0, 800) };
+  return { complexity: "simple", plan: text.slice(0, 800), subtasks: [] };
 }
 
 function shortJson(value: unknown): string {
