@@ -61,6 +61,10 @@ const I18N = {
     confirmDeleteConversation: "Excluir esta conversa e sua branch/worktree?",
     conversations: "conversas",
     currentConversation: "conversa",
+    usage: "uso dos planos",
+    refresh: "atualizar",
+    tokensLabel: "tokens (Claude + Codex)",
+    planLabel: "plano",
   },
   en: {
     newProject: "+ new project",
@@ -124,6 +128,10 @@ const I18N = {
     confirmDeleteConversation: "Delete this conversation and its branch/worktree?",
     conversations: "conversations",
     currentConversation: "conversation",
+    usage: "plan usage",
+    refresh: "refresh",
+    tokensLabel: "tokens (Claude + Codex)",
+    planLabel: "plan",
   },
 };
 
@@ -519,6 +527,47 @@ function renderCredentials() {
   if (els.inputComplexModel && !els.inputComplexModel.value) els.inputComplexModel.value = cred.complexModel || "";
 }
 
+async function loadUsage() {
+  const box = els.usageStatus;
+  if (!box) return;
+  box.innerHTML = '<span class="empty">…</span>';
+  try {
+    const res = await fetch("/api/usage");
+    renderUsage(await res.json());
+  } catch {
+    box.innerHTML = '<span class="empty">—</span>';
+  }
+}
+
+function usageBar(label, pct) {
+  const value = typeof pct === "number" ? Math.max(0, Math.min(100, pct)) : 0;
+  const text = typeof pct === "number" ? `${pct.toFixed(0)}%` : "—";
+  return `<div class="usage-row"><span>${escapeHtml(label)}</span><b>${text}</b></div><div class="bar"><i style="width:${value}%"></i></div>`;
+}
+
+function renderUsage(data) {
+  const c = data.claude;
+  const parts = [];
+  if (c) {
+    parts.push(
+      `<div class="cred-line"><span>Claude ${escapeHtml(c.subscriptionType || "")}</span><b>${escapeHtml(t("planLabel"))}</b></div>`,
+    );
+    parts.push(usageBar("5h", c.fiveHour?.utilization ?? null));
+    parts.push(usageBar("7d", c.sevenDay?.utilization ?? null));
+  } else {
+    parts.push('<div class="cred-line"><span>Claude</span><b>n/a</b></div>');
+  }
+  const codex = data.codex || {};
+  parts.push(
+    `<div class="cred-line"><span>Codex ${escapeHtml(codex.account || "")} ${codex.plan ? `(${escapeHtml(codex.plan)})` : ""}</span><b>${escapeHtml(codex.mode || "")}</b></div>`,
+  );
+  const tk = data.tokens || {};
+  parts.push(
+    `<div class="cred-line"><span>${escapeHtml(t("tokensLabel"))}</span><b>${tk.inputTokens ?? 0} in / ${tk.outputTokens ?? 0} out (${tk.runs ?? 0})</b></div>`,
+  );
+  els.usageStatus.innerHTML = parts.join("");
+}
+
 function sendMessage() {
   const text = els.input.value.trim();
   if (!text || !state.currentConversationId) return;
@@ -705,6 +754,7 @@ function openSettings() {
   els.settingsMsg.textContent = "";
   els.settingsMsg.className = "settings-msg";
   els.settingsModal.classList.remove("hidden");
+  void loadUsage();
 }
 function closeSettings() {
   els.settingsModal.classList.add("hidden");
@@ -894,6 +944,7 @@ els.browserModal.addEventListener("click", (event) => {
 els.settingsBtn.addEventListener("click", openSettings);
 els.settingsClose.addEventListener("click", closeSettings);
 els.settingsSave.addEventListener("click", saveSettings);
+els.usageRefresh.addEventListener("click", loadUsage);
 els.settingsModal.addEventListener("click", (event) => {
   if (event.target === els.settingsModal) closeSettings();
 });

@@ -28,6 +28,73 @@ export const CLAUDE_TOOLS = {
   reviewer: ["Read", "Glob", "Grep"],
 } as const;
 
+export interface ClaudeUsage {
+  subscriptionType: string | null;
+  fiveHour: { utilization: number | null; resetsAt: string | null } | null;
+  sevenDay: { utilization: number | null; resetsAt: string | null } | null;
+}
+
+interface UsageWindow {
+  utilization?: number | null;
+  resets_at?: string | null;
+}
+
+/**
+ * Best-effort read of the Claude plan usage via the SDK's experimental usage control.
+ * Returns null when unavailable (older CLI, no plan, API key instead of subscription).
+ */
+export async function getClaudeUsage(cwd: string, timeoutMs = 60_000): Promise<ClaudeUsage | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const stream = query({
+    prompt: "ok",
+    options: {
+      model: "haiku",
+      cwd,
+      maxTurns: 1,
+      allowedTools: [],
+      abortController: controller,
+    },
+  });
+  try {
+    for await (const message of stream) {
+      if (message.type === "system" && message.subtype === "init") {
+        const probe = stream as unknown as {
+          usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?: (opts?: {
+            skipBehaviors?: boolean;
+          }) => Promise<unknown>;
+        };
+        if (typeof probe.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET !== "function") {
+          return null;
+        }
+        const raw = (await probe.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({
+          skipBehaviors: true,
+        })) as {
+          subscription_type?: string | null;
+          rate_limits?: { five_hour?: UsageWindow | null; seven_day?: UsageWindow | null };
+        };
+        const norm = (w: UsageWindow | null | undefined) =>
+          w ? { utilization: w.utilization ?? null, resetsAt: w.resets_at ?? null } : null;
+        return {
+          subscriptionType: raw.subscription_type ?? null,
+          fiveHour: norm(raw.rate_limits?.five_hour),
+          sevenDay: norm(raw.rate_limits?.seven_day),
+        };
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+    try {
+      stream.close();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 export async function runClaudeAgent(
   options: RunClaudeAgentOptions,
 ): Promise<AgentRunResult & { sessionId: string }> {

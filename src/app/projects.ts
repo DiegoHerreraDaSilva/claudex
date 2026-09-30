@@ -26,6 +26,7 @@ export interface Conversation {
   activeAgent?: string;
   branch?: string;
   worktreePath?: string;
+  usage?: { inputTokens: number; outputTokens: number; runs: number };
 }
 
 export interface Project {

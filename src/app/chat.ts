@@ -186,6 +186,7 @@ export class ChatService extends TypedEmitter<ChatEvents> {
           claudeSessionId: run.sessionId,
           activeAgent: "claude:sonnet",
         });
+        await this.addUsage(projectId, conversationId, run.usage);
       } else {
         this.emitRouting(projectId, conversationId, {
           agent: "claude:opus",
@@ -215,6 +216,7 @@ export class ChatService extends TypedEmitter<ChatEvents> {
           outputSchema: PLAN_JSON_SCHEMA,
         });
         const plan = parsePlan(planner.result);
+        await this.addUsage(projectId, conversationId, planner.usage);
         const complex = plan.complexity === "complex";
         const workerPrompt = `${text}\n\nPlano aprovado:\n${plan.plan}`;
         await this.push(projectId, conversationId, "assistant", plan.plan);
@@ -250,6 +252,7 @@ export class ChatService extends TypedEmitter<ChatEvents> {
             codexThreadId: run.threadId,
             activeAgent: label,
           });
+          await this.addUsage(projectId, conversationId, run.usage);
         } else {
           this.emitRouting(projectId, conversationId, {
             agent: "claude:sonnet",
@@ -275,6 +278,7 @@ export class ChatService extends TypedEmitter<ChatEvents> {
             claudeSessionId: run.sessionId,
             activeAgent: "claude:sonnet",
           });
+          await this.addUsage(projectId, conversationId, run.usage);
         }
       }
 
@@ -410,6 +414,23 @@ export class ChatService extends TypedEmitter<ChatEvents> {
     await this.registry.update(project.id, { baseBranch });
     await this.registry.updateConversation(project.id, conversation.id, { branch, worktreePath });
     return { worktreePath, branch, baseBranch };
+  }
+
+  private async addUsage(
+    projectId: string,
+    conversationId: string,
+    usage: { inputTokens: number; outputTokens: number },
+  ): Promise<void> {
+    const conversation = this.registry.getConversation(projectId, conversationId);
+    if (!conversation) return;
+    const prev = conversation.usage ?? { inputTokens: 0, outputTokens: 0, runs: 0 };
+    await this.registry.updateConversation(projectId, conversationId, {
+      usage: {
+        inputTokens: prev.inputTokens + usage.inputTokens,
+        outputTokens: prev.outputTokens + usage.outputTokens,
+        runs: prev.runs + 1,
+      },
+    });
   }
 
   private emitRouting(

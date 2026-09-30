@@ -9,6 +9,7 @@ import { isGitRepo } from "../app/git.js";
 import type { ProjectRegistry } from "../app/projects.js";
 import type { OrchestratorConfig } from "../config.js";
 import { getCredentialStatus } from "../prerequisites.js";
+import { getClaudeUsage, type ClaudeUsage } from "../agents/claude.js";
 import { envelope } from "./protocol.js";
 import { defaultSettingsHooks, handleSettingsMessage, type SettingsIncoming } from "./settingsChannel.js";
 
@@ -43,6 +44,7 @@ export function createAppServer(options: AppServerOptions): AppServer {
   const chatUiDir = options.chatUiDir ?? defaultChatUiDir();
   const startedAt = options.startedAt ?? Date.now();
   const { chat, registry, config } = options;
+  let usageCache: { at: number; value: ClaudeUsage | null } | null = null;
 
   const server = createServer(async (req, res) => {
     try {
@@ -58,6 +60,42 @@ export function createAppServer(options: AppServerOptions): AppServer {
       }
       if (url.pathname === "/api/credentials") {
         return json(res, 200, getCredentialStatus(config));
+      }
+      if (url.pathname === "/api/usage") {
+        const cred = getCredentialStatus(config);
+        let claude: ClaudeUsage | null = null;
+        if (cred.claude.mode !== "none") {
+          if (usageCache && Date.now() - usageCache.at < 300_000) claude = usageCache.value;
+          else {
+            claude = await getClaudeUsage(config.projectRoot);
+            usageCache = { at: Date.now(), value: claude };
+          }
+        }
+        const tokens = registry
+          .list()
+          .flatMap((project) => project.conversations)
+          .reduce(
+            (acc, conversation) => ({
+              inputTokens: acc.inputTokens + (conversation.usage?.inputTokens ?? 0),
+              outputTokens: acc.outputTokens + (conversation.usage?.outputTokens ?? 0),
+              runs: acc.runs + (conversation.usage?.runs ?? 0),
+            }),
+            { inputTokens: 0, outputTokens: 0, runs: 0 },
+          );
+        return json(res, 200, {
+          claude,
+          codex: {
+            mode: cred.codex.mode,
+            account: cred.codex.account ?? null,
+            plan: cred.codex.plan ?? null,
+          },
+          tokens,
+          experimental: true,
+          note:
+            cred.codex.mode === "subscription"
+              ? "ChatGPT plan quota is not exposed by the Codex SDK; showing tokens only."
+              : null,
+        });
       }
       if (url.pathname === "/api/projects" && method === "GET") {
         return json(res, 200, registry.summaries(chatRunning(chat)));
