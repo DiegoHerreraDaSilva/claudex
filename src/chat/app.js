@@ -24,8 +24,8 @@ const I18N = {
     connectSub: "conectar (assinatura)",
     connectChatgpt: "conectar (ChatGPT)",
     disconnect: "desconectar",
-    clearAnthropic: "remover chave e voltar para a assinatura",
-    clearOpenai: "remover chave e voltar para o login ChatGPT",
+    clearAnthropic: "usar a assinatura",
+    clearOpenai: "usar o login ChatGPT",
     codexModel: "modelo forte do Codex",
     authLog: "log de autenticação",
     save: "salvar",
@@ -75,6 +75,7 @@ const I18N = {
     updateDev: "disponível só no app instalado",
     sectionAccounts: "contas",
     execution: "execução",
+    unavailable: "indisponível",
   },
   en: {
     newProject: "+ new project",
@@ -101,8 +102,8 @@ const I18N = {
     connectSub: "connect (subscription)",
     connectChatgpt: "connect (ChatGPT)",
     disconnect: "disconnect",
-    clearAnthropic: "clear key and use the subscription",
-    clearOpenai: "clear key and use the ChatGPT login",
+    clearAnthropic: "use the subscription",
+    clearOpenai: "use the ChatGPT login",
     codexModel: "Codex strong model",
     authLog: "auth log",
     save: "save",
@@ -152,6 +153,7 @@ const I18N = {
     updateDev: "packaged app only",
     sectionAccounts: "accounts",
     execution: "execution",
+    unavailable: "unavailable",
   },
 };
 
@@ -621,7 +623,7 @@ function renderUsage(data) {
     parts.push(usageBar("5h", c.fiveHour?.utilization ?? null));
     parts.push(usageBar("7d", c.sevenDay?.utilization ?? null));
   } else {
-    parts.push('<div class="cred-line"><span>Claude</span><b>n/a</b></div>');
+    parts.push(`<div class="cred-line"><span>Claude</span><b>${escapeHtml(t("unavailable"))}</b></div>`);
   }
   const codex = data.codex || {};
   parts.push(
