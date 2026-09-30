@@ -166,16 +166,62 @@ const state = {
   browserParent: null,
 };
 
-const els = new Proxy(
-  {},
-  {
-    get(_target, prop) {
-      const map = els._map ?? (els._map = {});
-      if (!map[prop]) map[prop] = document.getElementById(String(prop));
-      return map[prop];
-    },
-  },
-);
+const els = {
+  projectList: document.getElementById("project-list"),
+  newProjectBtn: document.getElementById("new-project-btn"),
+  credSummary: document.getElementById("cred-summary"),
+  projName: document.getElementById("proj-name"),
+  projMeta: document.getElementById("proj-meta"),
+  stopBtn: document.getElementById("stop-btn"),
+  applyBtn: document.getElementById("apply-btn"),
+  discardBtn: document.getElementById("discard-btn"),
+  langToggle: document.getElementById("lang-toggle"),
+  themeToggle: document.getElementById("theme-toggle"),
+  settingsBtn: document.getElementById("settings-btn"),
+  settingsDot: document.getElementById("settings-dot"),
+  transcript: document.getElementById("transcript"),
+  composer: document.getElementById("composer"),
+  input: document.getElementById("composer-input"),
+  sendBtn: document.getElementById("send-btn"),
+  diffFiles: document.getElementById("diff-files"),
+  diffView: document.getElementById("diff-view"),
+  tabSession: document.getElementById("tab-session"),
+  modal: document.getElementById("modal"),
+  modalClose: document.getElementById("modal-close"),
+  npName: document.getElementById("np-name"),
+  npPath: document.getElementById("np-path"),
+  npBrowse: document.getElementById("np-browse"),
+  npCreate: document.getElementById("np-create"),
+  npStatus: document.getElementById("np-status"),
+  browserModal: document.getElementById("browser-modal"),
+  browserClose: document.getElementById("browser-close"),
+  browserPath: document.getElementById("browser-path"),
+  browserList: document.getElementById("browser-list"),
+  browserUp: document.getElementById("browser-up"),
+  browserSelect: document.getElementById("browser-select"),
+  settingsModal: document.getElementById("settings-modal"),
+  settingsClose: document.getElementById("settings-close"),
+  settingsSave: document.getElementById("settings-save"),
+  settingsMsg: document.getElementById("settings-msg"),
+  credStatus: document.getElementById("cred-status"),
+  usageStatus: document.getElementById("usage-status"),
+  usageRefresh: document.getElementById("usage-refresh"),
+  updateField: document.getElementById("update-field"),
+  checkUpdates: document.getElementById("check-updates"),
+  updateStatus: document.getElementById("update-status"),
+  tsHint: document.getElementById("ts-hint"),
+  claudeMode: document.getElementById("claude-mode"),
+  claudeAccount: document.getElementById("claude-account"),
+  codexMode: document.getElementById("codex-mode"),
+  codexAccount: document.getElementById("codex-account"),
+  inputTypesafe: document.getElementById("input-typesafe"),
+  inputAnthropic: document.getElementById("input-anthropic"),
+  inputOpenai: document.getElementById("input-openai"),
+  inputComplexModel: document.getElementById("input-complex-model"),
+  clearAnthropic: document.getElementById("clear-anthropic"),
+  clearOpenai: document.getElementById("clear-openai"),
+  accountLog: document.getElementById("account-log"),
+};
 
 let socket = null;
 let lang = "pt";
