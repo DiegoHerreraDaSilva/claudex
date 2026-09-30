@@ -705,8 +705,8 @@ body {
 }
 
 /* Settings modal layout */
-.settings-card {
-  width: 760px;
+.modal-card.settings-card {
+  width: min(820px, 100%);
 }
 
 .settings-card .modal-body {
@@ -924,8 +924,8 @@ body {
   background: color-mix(in srgb, var(--bg) 72%, transparent);
   backdrop-filter: blur(3px);
   display: flex;
-  align-items: center;
-  justify-content: center;
+  overflow: auto;
+  padding: 24px;
   z-index: 50;
 }
 
@@ -935,7 +935,8 @@ body {
 
 .modal-card {
   width: 540px;
-  max-width: calc(100vw - 40px);
+  max-width: 100%;
+  margin: auto;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 14px;
