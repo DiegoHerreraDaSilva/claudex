@@ -473,7 +473,7 @@ function onMessage(msg) {
 function applyTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
   const btn = document.getElementById("theme-toggle");
-  if (btn) btn.textContent = theme === "dark" ? "light" : "dark";
+  if (btn) btn.textContent = theme === "dark" ? "Light" : "Dark";
 }
 
 function initTheme() {

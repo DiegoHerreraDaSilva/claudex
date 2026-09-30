@@ -417,6 +417,8 @@ Implementado e validado com GitHub real na PR #1; ver [FASE-6.md](FASE-6.md). O 
 
 ## 11. Design system / componentes (referência)
 
+**Padrão de escrita:** frases, rótulos, botões e mensagens da interface começam com letra maiúscula em português e inglês. Manter nomes de arquivos, comandos e dados fornecidos pelo usuário como recebidos.
+
 **Componentes atuais** (`src/chat/components/`): `commandPalette`, `toast`,
 `confirm`, `previewModal`.
 

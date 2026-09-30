@@ -98,7 +98,7 @@ async function loadBrowser(target) {
         el("span", { class: "ico", text: "▸" }),
         el("span", { class: "nm", text: entry.name }),
       );
-      if (entry.isGitRepo) row.appendChild(el("span", { class: "git", text: "git" }));
+      if (entry.isGitRepo) row.appendChild(el("span", { class: "git", text: "Git" }));
       listEl.appendChild(row);
     }
     ids("browser-up").disabled = !data.parent;
@@ -185,7 +185,7 @@ function initSettings(settingsModal) {
     const cred = state.credentials;
     if (!cred) return;
     if (credSummary) {
-      credSummary.textContent = `claude: ${cred.claude?.mode ?? "?"} · codex: ${cred.codex?.mode ?? "?"} · jev: ${cred.typesafe?.configured ? "ok" : "off"}`;
+      credSummary.textContent = `Claude: ${cred.claude?.mode ?? "?"} · Codex: ${cred.codex?.mode ?? "?"} · Jev: ${cred.typesafe?.configured ? "ok" : "off"}`;
     }
     if (tsHint) tsHint.textContent = cred.typesafe?.configured ? `atual: ${cred.typesafe.hint}` : "";
     if (claudeMode) {

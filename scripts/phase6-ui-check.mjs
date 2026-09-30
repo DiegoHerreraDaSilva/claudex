@@ -419,7 +419,7 @@ app.whenReady().then(async () => {
     await waitFor("!document.querySelector('.ci-refresh').disabled");
     ciStatus = "none";
     await evaluate("document.querySelector('.ci-refresh').click()");
-    await waitFor("document.querySelector('.ci-status')?.textContent.includes('nenhum check')");
+    await waitFor("document.querySelector('.ci-status')?.textContent.toLowerCase().includes('nenhum check')");
     await waitFor("!document.querySelector('.ci-refresh').disabled");
     ciStatus = "passed";
     await evaluate("document.querySelector('.ci-refresh').click()");
@@ -441,13 +441,13 @@ app.whenReady().then(async () => {
     ciStatus = "none";
     await evaluate("document.querySelector('.ci-refresh').click()");
     await waitFor(
-      "document.querySelector('.ci-status')?.textContent.includes('nenhum check') && !document.querySelector('.ci-refresh').disabled",
+      "document.querySelector('.ci-status')?.textContent.toLowerCase().includes('nenhum check') && !document.querySelector('.ci-refresh').disabled",
     );
     await evaluate(
       "document.getElementById('lang-toggle').click(); document.getElementById('theme-toggle').click()",
     );
     await waitFor(
-      "document.querySelector('.github-section')?.textContent.includes('no checks published')",
+      "document.querySelector('.github-section')?.textContent.toLowerCase().includes('no checks published')",
     );
     for (const width of [320, 768, 1440]) {
       win.setContentSize(width, 1100);
