@@ -102,70 +102,79 @@
     </div>
 
     <div id="settings-modal" class="modal hidden">
-      <div class="modal-card">
+      <div class="modal-card settings-card">
         <div class="modal-head">
           <span data-i18n="settingsTitle">contas e chaves</span>
           <button id="settings-close" class="ghost-btn" data-i18n="close">fechar</button>
         </div>
         <div class="modal-body">
-          <div id="cred-status" class="cred-status"></div>
+          <section class="settings-section">
+            <h3 class="section-title" data-i18n="sectionAccounts">contas</h3>
+            <div class="account-grid">
+              <div class="account-card">
+                <div class="account-head">
+                  <span class="account-name">Claude</span>
+                  <span id="claude-mode" class="mode-chip"></span>
+                </div>
+                <div id="claude-account" class="account-detail"></div>
+                <div class="btn-row">
+                  <button class="small-btn" data-provider="claude" data-action="login" data-i18n="connectSub">conectar</button>
+                  <button class="small-btn danger" data-provider="claude" data-action="logout" data-i18n="disconnect">desconectar</button>
+                </div>
+                <input id="input-anthropic" type="password" placeholder="ANTHROPIC_API_KEY (opcional)" autocomplete="off" />
+                <label class="clear"><input type="checkbox" id="clear-anthropic" /> <span data-i18n="clearAnthropic">remover chave e usar a assinatura</span></label>
+              </div>
 
-          <div class="field">
-            <div class="field-label" data-i18n="usage">uso dos planos</div>
-            <div id="usage-status" class="cred-status"><span class="empty">—</span></div>
-            <button id="usage-refresh" class="small-btn" data-i18n="refresh">atualizar</button>
-          </div>
+              <div class="account-card">
+                <div class="account-head">
+                  <span class="account-name">Codex</span>
+                  <span id="codex-mode" class="mode-chip"></span>
+                </div>
+                <div id="codex-account" class="account-detail"></div>
+                <div class="btn-row">
+                  <button class="small-btn" data-provider="codex" data-action="login" data-i18n="connectChatgpt">conectar</button>
+                  <button class="small-btn danger" data-provider="codex" data-action="logout" data-i18n="disconnect">desconectar</button>
+                </div>
+                <input id="input-openai" type="password" placeholder="OPENAI_API_KEY (opcional)" autocomplete="off" />
+                <label class="clear"><input type="checkbox" id="clear-openai" /> <span data-i18n="clearOpenai">remover chave e usar o ChatGPT</span></label>
+              </div>
+            </div>
+          </section>
 
-          <div class="field" id="update-field" style="display: none">
-            <div class="field-label" data-i18n="appUpdates">atualizações</div>
-            <div class="btn-row">
-              <button id="check-updates" class="small-btn" data-i18n="checkUpdates">verificar atualizações</button>
+          <section class="settings-section">
+            <div class="section-head">
+              <h3 class="section-title" data-i18n="usage">uso dos planos</h3>
+              <button id="usage-refresh" class="small-btn" data-i18n="refresh">atualizar</button>
+            </div>
+            <div id="usage-status" class="usage-grid"><span class="empty">—</span></div>
+          </section>
+
+          <section class="settings-section">
+            <div class="section-head">
+              <h3 class="section-title">Jev / TypeSafe</h3>
+              <em id="ts-hint" class="hint"></em>
+            </div>
+            <input id="input-typesafe" type="password" data-i18n-ph="typesafePh" placeholder="cole a chave de console.typesafe.ai/keys" autocomplete="off" />
+          </section>
+
+          <section class="settings-section">
+            <h3 class="section-title" data-i18n="execution">execução</h3>
+            <label class="field-label" data-i18n="codexModel">modelo forte do Codex</label>
+            <input id="input-complex-model" type="text" placeholder="gpt-6-sol" autocomplete="off" />
+          </section>
+
+          <section class="settings-section" id="update-field" style="display: none">
+            <div class="section-head">
+              <h3 class="section-title" data-i18n="appUpdates">atualizações</h3>
               <span id="update-status" class="settings-msg"></span>
             </div>
-          </div>
+            <button id="check-updates" class="small-btn" data-i18n="checkUpdates">verificar atualizações</button>
+          </section>
 
-          <div class="field">
-            <div class="field-label">TypeSafe API key <em id="ts-hint"></em></div>
-            <input id="input-typesafe" type="password" data-i18n-ph="typesafePh" placeholder="cole a chave de console.typesafe.ai/keys" autocomplete="off" />
-          </div>
-
-          <div class="field">
-            <div class="field-label">Claude</div>
-            <div class="mode-row">
-              <span id="claude-mode" class="mode-chip"></span>
-              <span id="claude-account" class="mode-detail"></span>
-            </div>
-            <div class="btn-row">
-              <button class="small-btn" data-provider="claude" data-action="login" data-i18n="connectSub">conectar (assinatura)</button>
-              <button class="small-btn danger" data-provider="claude" data-action="logout" data-i18n="disconnect">desconectar</button>
-            </div>
-            <input id="input-anthropic" type="password" placeholder="ANTHROPIC_API_KEY (opcional)" autocomplete="off" />
-            <label class="clear"><input type="checkbox" id="clear-anthropic" /> <span data-i18n="clearAnthropic">remover chave e voltar para a assinatura</span></label>
-          </div>
-
-          <div class="field">
-            <div class="field-label">Codex</div>
-            <div class="mode-row">
-              <span id="codex-mode" class="mode-chip"></span>
-              <span id="codex-account" class="mode-detail"></span>
-            </div>
-            <div class="btn-row">
-              <button class="small-btn" data-provider="codex" data-action="login" data-i18n="connectChatgpt">conectar (ChatGPT)</button>
-              <button class="small-btn danger" data-provider="codex" data-action="logout" data-i18n="disconnect">desconectar</button>
-            </div>
-            <input id="input-openai" type="password" placeholder="OPENAI_API_KEY (opcional)" autocomplete="off" />
-            <label class="clear"><input type="checkbox" id="clear-openai" /> <span data-i18n="clearOpenai">remover chave e voltar para o login ChatGPT</span></label>
-          </div>
-
-          <div class="field">
-            <div class="field-label" data-i18n="codexModel">modelo forte do Codex</div>
-            <input id="input-complex-model" type="text" placeholder="gpt-6-sol" autocomplete="off" />
-          </div>
-
-          <div class="field">
-            <div class="field-label" data-i18n="authLog">log de autenticação</div>
+          <section class="settings-section">
+            <h3 class="section-title" data-i18n="authLog">log de autenticação</h3>
             <pre id="account-log" class="account-log"></pre>
-          </div>
+          </section>
         </div>
         <div class="modal-foot">
           <span id="settings-msg" class="settings-msg"></span>

@@ -73,6 +73,8 @@ const I18N = {
     updateDownloaded: "versão {version} baixada — reinicie para aplicar",
     updateError: "erro ao verificar",
     updateDev: "disponível só no app instalado",
+    sectionAccounts: "contas",
+    execution: "execução",
   },
   en: {
     newProject: "+ new project",
@@ -148,6 +150,8 @@ const I18N = {
     updateDownloaded: "version {version} downloaded — restart to apply",
     updateError: "check failed",
     updateDev: "packaged app only",
+    sectionAccounts: "accounts",
+    execution: "execution",
   },
 };
 
