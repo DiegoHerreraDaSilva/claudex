@@ -13,6 +13,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "..");
 process.env["CLAUDEX_ROOT"] = repoRoot;
 
+app.setName("Claudex");
+
 let mainWindow = null;
 let appServer = null;
 let autoUpdater = null;

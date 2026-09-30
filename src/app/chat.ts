@@ -13,6 +13,7 @@ import {
   branchExists,
   checkout,
   commitAll,
+  commitWorkingTree,
   createInitialCommit,
   currentBranch,
   deleteBranch,
@@ -89,6 +90,7 @@ export class ChatService extends TypedEmitter<ChatEvents> {
   private readonly running = new Set<string>();
   private readonly diffs = new Map<string, ChatDiff>();
   private readonly aborts = new Map<string, AbortController>();
+  private readonly lastAssistantText = new Map<string, string>();
 
   constructor(
     private readonly registry: ProjectRegistry,
@@ -410,7 +412,14 @@ export class ChatService extends TypedEmitter<ChatEvents> {
         project.id,
         conversation.id,
         "system",
-        "repositório sem commits: criei um commit inicial vazio para poder trabalhar",
+        "repositório sem commits: criei um commit inicial com os arquivos atuais",
+      );
+    } else if (await commitWorkingTree(root, "chore: claudex snapshot before task")) {
+      await this.push(
+        project.id,
+        conversation.id,
+        "system",
+        "havia alterações não commitadas: criei um snapshot para o worktree espelhar a pasta",
       );
     }
     const baseBranch = project.baseBranch ?? (await currentBranch(root));
@@ -488,16 +497,20 @@ export class ChatService extends TypedEmitter<ChatEvents> {
       const content = (message as { message?: { content?: unknown[] } }).message?.content ?? [];
       for (const block of content) {
         const item = block as { type?: string; text?: string; name?: string; input?: unknown };
-        if (item.type === "text" && item.text) void this.push(projectId, conversationId, "assistant", item.text);
-        else if (item.type === "tool_use") {
+        if (item.type === "text" && item.text) {
+          this.lastAssistantText.set(conversationId, item.text.trim());
+          void this.push(projectId, conversationId, "assistant", item.text);
+        } else if (item.type === "tool_use") {
           void this.push(projectId, conversationId, "tool", item.name ?? "tool", shortJson(item.input));
         }
       }
       return;
     }
     if (record.type === "result" && record.subtype === "success") {
-      const text = (message as { result?: string }).result ?? "";
-      if (text) void this.push(projectId, conversationId, "result", text);
+      const text = ((message as { result?: string }).result ?? "").trim();
+      if (text && text !== this.lastAssistantText.get(conversationId)) {
+        void this.push(projectId, conversationId, "result", text);
+      }
     }
   }
 

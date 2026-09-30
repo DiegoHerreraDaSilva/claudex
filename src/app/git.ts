@@ -42,9 +42,19 @@ export async function hasCommits(dir: string): Promise<boolean> {
   return result.code === 0;
 }
 
-/** Creates an empty initial commit so worktrees can be created on a fresh repo. */
+/** Creates an initial commit (including existing files) so worktrees mirror the project. */
 export async function createInitialCommit(dir: string): Promise<void> {
+  await runGit(dir, ["add", "-A"], true);
   await runGit(dir, [...GIT_IDENTITY, "commit", "--allow-empty", "-m", "chore: initial commit (claudex)"]);
+}
+
+/** Commits pending changes so a worktree can be branched from the current state. */
+export async function commitWorkingTree(dir: string, message: string): Promise<boolean> {
+  await runGit(dir, ["add", "-A"], true);
+  const status = await runGit(dir, ["status", "--porcelain"], true);
+  if (status.stdout.trim().length === 0) return false;
+  await runGit(dir, [...GIT_IDENTITY, "commit", "-m", message]);
+  return true;
 }
 
 export async function branchExists(dir: string, branch: string): Promise<boolean> {
