@@ -13,6 +13,7 @@ export interface CommandResult {
 
 export interface CommandOptions {
   cwd: string;
+  onOutput?: (text: string, stream: "stdout" | "stderr") => void;
   timeoutMs?: number;
   maxOutputBytes?: number;
   signal?: AbortSignal;
@@ -64,6 +65,7 @@ export function runCommand(
       const piece = chunk.subarray(0, remaining).toString();
       capturedBytes += Math.min(chunk.length, remaining);
       if (chunk.length > remaining) truncated = true;
+      if (piece) options.onOutput?.(piece, stream);
       if (stream === "stdout") stdout += piece;
       else stderr += piece;
     };

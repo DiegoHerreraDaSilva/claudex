@@ -116,7 +116,7 @@ export function projectMissionEvent(
       break;
     case "mission:stopped":
       summary.status = "cancelled";
-      summary.finishedAt = event.at;
+      summary.finishedAt ??= event.at;
       break;
     case "mission:applied":
       summary.status = "applied";

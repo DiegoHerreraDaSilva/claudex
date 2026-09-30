@@ -1,3 +1,4 @@
+import { projectToolsRoutes } from "./projectTools.js";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { existsSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
@@ -50,6 +51,8 @@ export function createAppServer(options: AppServerOptions): AppServer {
     try {
       const url = new URL(req.url ?? "/", "http://localhost");
       const method = req.method ?? "GET";
+
+      if (await toolsRoute(req, res, url)) return;
 
       if (url.pathname === "/health") {
         return json(res, 200, {
@@ -181,6 +184,8 @@ export function createAppServer(options: AppServerOptions): AppServer {
       if (client.readyState === WebSocket.OPEN) client.send(encoded);
     }
   };
+
+  const toolsRoute = projectToolsRoutes(chat, registry, config.dataDir, config.worktreesDir, event => broadcast(envelope({ type: "terminal:out", ...event })));
 
   chat.on("projects:updated", (data) => broadcast(envelope({ type: "projects", data: data.projects })));
   chat.on("chat:message", (data) => broadcast(envelope({ type: "chat:message", ...data })));

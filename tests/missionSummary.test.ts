@@ -28,6 +28,9 @@ describe("mission projection", () => {
     expect(summary?.status).toBe("reviewing");
     summary = projectMissionEvent(summary, event("mission:completed"));
     expect(summary?.status).toBe("ready");
+    const restored = projectMissionEvent(summary, { ...event("mission:stopped"), at: 999 });
+    expect(restored?.status).toBe("cancelled");
+    expect(restored?.finishedAt).toBe(100);
     summary = projectMissionEvent(summary, event("mission:started"));
     expect(summary?.verification).toEqual([]);
     expect(summary?.finishedAt).toBeUndefined();

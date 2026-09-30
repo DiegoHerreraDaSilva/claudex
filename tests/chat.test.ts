@@ -34,10 +34,27 @@ it("claims a conversation before asynchronous work so duplicate sends cannot sta
   try {
     expect(chat.isRunning(id)).toBe(true);
     await expect(chat.send(project.id, id, "duplicate")).rejects.toThrow("already running");
+    await expect(chat.withProjectOperation(project.id, async () => undefined)).rejects.toThrow(
+      "busy",
+    );
   } finally {
     await new Promise((resolve) => setTimeout(resolve, 20));
     pending.release();
     await first;
+    let release!: () => void;
+    const operation = chat.withProjectOperation(
+      project.id,
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    await expect(chat.send(project.id, id, "blocked")).rejects.toThrow("workspace operation");
+    await expect(chat.withProjectOperation(project.id, async () => undefined)).rejects.toThrow(
+      "busy",
+    );
+    release();
+    await operation;
     await registry.flush();
     await rm(dir, { recursive: true, force: true });
   }

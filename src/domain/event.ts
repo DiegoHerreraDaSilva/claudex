@@ -14,6 +14,7 @@ export type MissionEventType =
   | "diff:created"
   | "cost:updated"
   | "checkpoint:created"
+  | "context:loaded"
   | "verification:started"
   | "verification:completed"
   | "review:started"

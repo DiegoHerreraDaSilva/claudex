@@ -1,3 +1,5 @@
+import { MemoryService, memoryPrompt, selectPromptMemory } from "./memoryService.js";
+import { CheckpointService } from "./checkpointService.js";
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -83,6 +85,9 @@ interface UsageInfo {
  * worktree + continuous session). ChatService and, later, the CLI call this.
  */
 export class MissionService {
+  private readonly memories: MemoryService;
+  private readonly checkpoints: CheckpointService;
+  private readonly context = new Map<string, string>();
   private readonly lastAssistantText = new Map<string, string>();
 
   constructor(
@@ -91,7 +96,10 @@ export class MissionService {
     private readonly config: OrchestratorConfig,
     private readonly worktreesBase: string,
     private readonly events: EventStore,
-  ) {}
+  ) {
+    this.memories = new MemoryService(path.join(config.dataDir, "memory"));
+    this.checkpoints = new CheckpointService(path.join(config.dataDir, "checkpoints"));
+  }
 
   async eventsFor(missionId: string): Promise<TaskEvent[]> {
     return this.events.read(missionId);
@@ -109,6 +117,7 @@ export class MissionService {
       throw err;
     } finally {
       this.lastAssistantText.delete(input.conversationId);
+      this.context.delete(input.conversationId);
     }
   }
 
@@ -126,6 +135,10 @@ export class MissionService {
     });
 
     const { worktreePath, baseBranch, branch } = await this.ensureWorktree(project, conversation, channel);
+    const allMemory = await this.memories.list(projectId);
+    const memory = selectPromptMemory(allMemory);
+    this.context.set(conversationId, memoryPrompt(memory));
+    await this.record(conversationId, channel, { type: "context:loaded", level: "info", message: `${memory.length} project memories loaded`, payload: { memory, omittedMemories: allMemory.length - memory.length, worktreePath, branch, baseBranch } });
     signal.throwIfAborted();
     const route = await this.jev.routeTask(text);
     signal.throwIfAborted();
@@ -235,7 +248,7 @@ export class MissionService {
       payload: { label: "claude:opus", model: "opus", role: "planner" },
     });
     const planner = await runClaudeAgent({
-      prompt: buildPlannerPrompt(text),
+      prompt: buildPlannerPrompt(text) + (this.context.get(conversationId) ?? ""),
       model: "opus",
       worktreePath,
       allowedTools: [...CLAUDE_TOOLS.planner],
@@ -280,7 +293,7 @@ export class MissionService {
         payload: { label, model: this.config.defaultComplexModel, role: "implementer" },
       });
       const run = await runCodexAgent({
-        prompt: workerPrompt,
+        prompt: workerPrompt + (this.context.get(conversationId) ?? ""),
         worktreePath,
         model: this.config.defaultComplexModel,
         timeoutMs: this.config.agentTimeoutMs,
@@ -332,7 +345,7 @@ export class MissionService {
       const label = conversation.activeAgent;
       const startedAt = Date.now();
       await this.record(conversationId, channel, { type: "agent:started", level: "info", message: `${label} (correction)`, payload: { role: "implementer" } });
-      const run = await runCodexAgent({ prompt, worktreePath, model: this.config.defaultComplexModel, timeoutMs: this.config.agentTimeoutMs, signal, resumeThreadId: conversation.codexThreadId, onEvent: event => this.streamCodex(conversationId, channel, event) });
+      const run = await runCodexAgent({ prompt: prompt + (this.context.get(conversationId) ?? ""), worktreePath, model: this.config.defaultComplexModel, timeoutMs: this.config.agentTimeoutMs, signal, resumeThreadId: conversation.codexThreadId, onEvent: event => this.streamCodex(conversationId, channel, event) });
       await this.registry.updateConversation(projectId, conversationId, { codexThreadId: run.threadId });
       await this.addUsage(projectId, conversationId, channel, { label, model: this.config.defaultComplexModel, usage: run.usage, startedAt });
     } else {
@@ -361,7 +374,7 @@ export class MissionService {
       payload: { label: args.label, model: args.model, role: "implementer" },
     });
     const run = await runClaudeAgent({
-      prompt: args.prompt,
+      prompt: args.prompt + (this.context.get(args.conversationId) ?? ""),
       model: args.model,
       worktreePath: args.worktreePath,
       allowedTools: args.tools,
@@ -438,6 +451,10 @@ export class MissionService {
         },
         costUsd: (conversation.costUsd ?? 0) + costUsd,
       });
+    }
+    if (conversation?.worktreePath) {
+      const checkpoint = await this.checkpoints.create(conversationId, conversation.worktreePath, info.label);
+      await this.record(conversationId, channel, { type: "checkpoint:created", level: "info", message: `Checkpoint ${checkpoint.index}: ${info.label}`, payload: { checkpoint } });
     }
     const endedAt = Date.now();
     const agentRun: AgentRun = {
