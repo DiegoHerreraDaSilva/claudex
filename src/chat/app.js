@@ -593,7 +593,7 @@ function initResizers() {
 
 function initShortcuts() {
   window.addEventListener("keydown", (event) => {
-    if (document.querySelector(".permission-dialog[open]")) return;
+    if (document.querySelector("dialog[open]")) return;
     const mod = event.ctrlKey || event.metaKey;
     if (mod && event.key.toLowerCase() === "k") {
       event.preventDefault();

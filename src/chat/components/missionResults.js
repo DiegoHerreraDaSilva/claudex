@@ -1,3 +1,4 @@
+import { renderGitHub } from "./github.js";
 import { el } from "../lib/dom.js";
 import { t } from "../lib/i18n.js";
 import { currentConversation, currentDiff, isRunning, state } from "../lib/store.js";
@@ -27,6 +28,7 @@ export function renderMissionResults(actions) {
   }
   host.appendChild(renderVerification(summary));
   host.appendChild(renderReview(summary, actions));
+  host.appendChild(renderGitHub(actions));
   if (summary?.status === "analysed") {
     host.appendChild(el("p", { text: t("manualAnalysis") }));
     return host;

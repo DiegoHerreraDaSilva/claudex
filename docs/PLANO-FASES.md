@@ -2,17 +2,17 @@
 
 > Documento de handoff. Descreve o estado atual do projeto e o plano detalhado
 > para continuar o desenvolvimento em outras sessões.
-> Última atualização: 30/09/2026, após a implementação da Fase 4.
-> Fase 5 concluída localmente. Próxima etapa: Fase 6. Ver [entrega da Fase 5](FASE-5.md).
+> Última atualização: 30/09/2026, após a integração GitHub/CI da Fase 6.
+> Fases 3–5 concluídas localmente. Fase 6: GitHub/CI implementados; Browser QA e validação GitHub autenticada pendentes. Ver [entrega da Fase 6](FASE-6.md).
 
 ---
 
 ## 0. Como retomar (checklist rápido)
 
 1. `cd C:\Users\dherrera\Desktop\Claudex`
-2. `git status` e retomar a branch local `codex/phase4-intelligence`; consultar o remoto antes de sincronizar alterações.
+2. `git status` e retomar a branch local `codex/phase6-devops`; consultar o remoto antes de sincronizar alterações.
 3. `npm install` (se necessário).
-4. `npm run build && npm run lint && npm test` — deve estar tudo verde (51 testes).
+4. `npm run build && npm run lint && npm test` — conferir os comandos e resultados nas entregas de cada fase.
 5. Subir a UI para inspecionar: `npm run app:web` (porta 8080) e rodar
    `npm run ui:check -- http://127.0.0.1:8080` (script headless que captura erros de console).
 6. Ler a seção da fase desejada (Fase 3 → seção 7, etc.).
@@ -399,7 +399,9 @@ terminal, git workspace, checkpoints e histórico de missões.
 **Objetivo:** GitHub/PR/CI e Browser QA.
 
 ### 6.1 GitHub (`src/infrastructure/github.ts`)
-- Usar `gh` (já instalado e autenticado como `DiegoHerreraDaSilva`).
+
+Implementado localmente; ver [FASE-6.md](FASE-6.md). O `gh` está instalado, mas foi verificado sem login nesta máquina.
+- Usar `gh`; autenticar com `gh auth login` antes da validação com GitHub real.
 - `POST /api/missions/:id/pr` → abre PR da branch da missão (`gh pr create`).
 - `GET /api/missions/:id/checks` → `gh pr checks` (status de CI).
 

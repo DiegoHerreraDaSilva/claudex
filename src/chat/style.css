@@ -2192,3 +2192,14 @@ body {
   .workspace-header .proj-info { flex-basis: 100%; }
   .workspace-header .header-actions { margin-left: 0; max-width: 100%; flex-wrap: wrap; }
 }
+
+.github-pr, .ci-check { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; overflow-wrap: anywhere; }
+.github-pr { flex-wrap: wrap; }
+.github-section a { color: var(--accent-strong); }
+.github-error, .ci-status.failed { color: var(--err); }
+.ci-status.passed { color: var(--ok); }
+.ci-status.pending { color: var(--warn); }
+.pr-dialog input[type="text"], .pr-dialog input:not([type]), .pr-dialog textarea { width: 100%; margin: 6px 0 14px; padding: 8px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--elev); color: var(--text); font: inherit; }
+.pr-dialog textarea { resize: vertical; }
+.pr-dialog code { display: block; overflow-wrap: anywhere; }
+.pr-draft { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
