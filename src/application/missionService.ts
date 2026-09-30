@@ -1,3 +1,5 @@
+import { PermissionBroker, codexPermissions } from "./permissionBroker.js";
+import type { PermissionCoordinator } from "./permissionCoordinator.js";
 import { MemoryService, memoryPrompt, selectPromptMemory } from "./memoryService.js";
 import { CheckpointService } from "./checkpointService.js";
 import { existsSync } from "node:fs";
@@ -87,6 +89,7 @@ interface UsageInfo {
 export class MissionService {
   private readonly memories: MemoryService;
   private readonly checkpoints: CheckpointService;
+  private readonly brokers = new Map<string, PermissionBroker>();
   private readonly context = new Map<string, string>();
   private readonly lastAssistantText = new Map<string, string>();
 
@@ -96,6 +99,7 @@ export class MissionService {
     private readonly config: OrchestratorConfig,
     private readonly worktreesBase: string,
     private readonly events: EventStore,
+    private readonly permissions?: PermissionCoordinator,
   ) {
     this.memories = new MemoryService(path.join(config.dataDir, "memory"));
     this.checkpoints = new CheckpointService(path.join(config.dataDir, "checkpoints"));
@@ -112,12 +116,17 @@ export class MissionService {
       await this.record(input.conversationId, input.channel, {
         type: input.signal.aborted ? "mission:stopped" : "mission:failed",
         level: input.signal.aborted ? "warn" : "error",
-        message: input.signal.aborted ? "Mission interrupted" : err instanceof Error ? err.message : String(err),
+        message: input.signal.aborted
+          ? "Mission interrupted"
+          : err instanceof Error
+            ? err.message
+            : String(err),
       });
       throw err;
     } finally {
       this.lastAssistantText.delete(input.conversationId);
       this.context.delete(input.conversationId);
+      this.brokers.delete(input.conversationId);
     }
   }
 
@@ -131,14 +140,93 @@ export class MissionService {
       type: "mission:started",
       level: "info",
       message: text,
-      payload: { projectId },
+      payload: { projectId, autonomy: conversation.autonomy ?? "autonomous" },
     });
 
-    const { worktreePath, baseBranch, branch } = await this.ensureWorktree(project, conversation, channel);
+    const mode = conversation.autonomy ?? "autonomous";
+    if (mode === "manual") {
+      const root =
+        conversation.worktreePath && existsSync(conversation.worktreePath)
+          ? conversation.worktreePath
+          : project.rootPath;
+      const broker = new PermissionBroker(
+        mode,
+        projectId,
+        conversationId,
+        root,
+        undefined,
+        (event) => this.record(conversationId, channel, event),
+      );
+      this.brokers.set(conversationId, broker);
+      const memory = selectPromptMemory(await this.memories.list(projectId));
+      this.context.set(conversationId, memoryPrompt(memory));
+      await this.record(conversationId, channel, {
+        type: "context:loaded",
+        level: "info",
+        message: "Read-only analysis",
+        payload: { memory, worktreePath: root, autonomy: mode },
+      });
+      channel.routing({
+        agent: "claude:sonnet",
+        model: "sonnet",
+        label: "read-only analysis",
+        stage: "route",
+        confidence: 1,
+        source: "autonomy",
+      });
+      await this.runClaude({
+        projectId,
+        conversationId,
+        channel,
+        worktreePath: root,
+        prompt: `Analyse the following task using read-only tools. Explain findings and suggest a plan. Do not edit files, execute commands, or claim implementation is complete.\n${text}`,
+        model: "sonnet",
+        label: "claude:sonnet (analysis)",
+        tools: [...CLAUDE_TOOLS.planner],
+        maxTurns: 15,
+        signal,
+      });
+      await this.record(conversationId, channel, {
+        type: "mission:completed",
+        level: "success",
+        message: "Read-only analysis completed",
+        payload: { readOnly: true },
+      });
+      return;
+    }
+    const { worktreePath, baseBranch, branch } = await this.ensureWorktree(
+      project,
+      conversation,
+      channel,
+    );
+    this.brokers.set(
+      conversationId,
+      new PermissionBroker(
+        mode,
+        projectId,
+        conversationId,
+        worktreePath,
+        this.permissions
+          ? (request, requestSignal) => this.permissions!.request(request, requestSignal)
+          : undefined,
+        (event) => this.record(conversationId, channel, event),
+      ),
+    );
     const allMemory = await this.memories.list(projectId);
     const memory = selectPromptMemory(allMemory);
     this.context.set(conversationId, memoryPrompt(memory));
-    await this.record(conversationId, channel, { type: "context:loaded", level: "info", message: `${memory.length} project memories loaded`, payload: { memory, omittedMemories: allMemory.length - memory.length, worktreePath, branch, baseBranch } });
+    await this.record(conversationId, channel, {
+      type: "context:loaded",
+      level: "info",
+      message: `${memory.length} project memories loaded`,
+      payload: {
+        memory,
+        omittedMemories: allMemory.length - memory.length,
+        worktreePath,
+        branch,
+        baseBranch,
+      },
+    });
     signal.throwIfAborted();
     const route = await this.jev.routeTask(text);
     signal.throwIfAborted();
@@ -200,30 +288,69 @@ export class MissionService {
         payload: { route: route.route, confidence: route.confidence, source: route.source },
       });
 
-      plan = await this.runPlanner({ projectId, conversationId, channel, worktreePath, text, signal });
+      plan = await this.runPlanner({
+        projectId,
+        conversationId,
+        channel,
+        worktreePath,
+        text,
+        signal,
+      });
     }
 
-    await validateMission({ signal }, {
-      captureDiff: async () => {
-        signal.throwIfAborted();
-        await commitAll(worktreePath, text);
-        const diff = await diffAgainst(worktreePath, baseBranch);
-        const files = parseDiffFiles(diff);
-        const head = (await runGit(worktreePath, ["rev-parse", "HEAD"])).stdout.trim();
-        channel.diff(diff, files, branch, baseBranch);
-        await this.record(conversationId, channel, {
-          type: "diff:created", level: files.length > 0 ? "success" : "info",
-          message: `${files.length} arquivo(s) alterado(s)`,
-          payload: { files, branch, baseBranch, head, ...diffStats(diff) },
-        });
-        return diff;
+    await validateMission(
+      { signal },
+      {
+        captureDiff: async () => {
+          signal.throwIfAborted();
+          await commitAll(worktreePath, text);
+          const diff = await diffAgainst(worktreePath, baseBranch);
+          const files = parseDiffFiles(diff);
+          const head = (await runGit(worktreePath, ["rev-parse", "HEAD"])).stdout.trim();
+          channel.diff(diff, files, branch, baseBranch);
+          await this.record(conversationId, channel, {
+            type: "diff:created",
+            level: files.length > 0 ? "success" : "info",
+            message: `${files.length} arquivo(s) alterado(s)`,
+            payload: { files, branch, baseBranch, head, ...diffStats(diff) },
+          });
+          return diff;
+        },
+        verify: () =>
+          verifyMission({
+            missionId: conversationId,
+            worktreePath,
+            signal,
+            timeoutMs: this.config.agentTimeoutMs,
+            onEvent: (event) => this.record(conversationId, channel, event),
+            authorize: async (kind, command) =>
+              this.brokers
+                .get(conversationId)!
+                .authorize(kind === "security" ? "net" : "tests", "Verification", command, signal),
+          }),
+        review: (diff) =>
+          reviewMission(
+            {
+              missionId: conversationId,
+              worktreePath,
+              diff,
+              plan,
+              signal,
+              timeoutMs: this.config.agentTimeoutMs,
+            },
+            { jev: this.jev },
+          ),
+        correct: (prompt) => this.correct(input, worktreePath, prompt),
+        record: (event) => this.record(conversationId, channel, event),
+        onReviewUsage: (run, startedAt) =>
+          this.addUsage(projectId, conversationId, channel, {
+            label: "claude:opus (reviewer)",
+            model: "opus",
+            usage: run.usage,
+            startedAt,
+          }),
       },
-      verify: () => verifyMission({ missionId: conversationId, worktreePath, signal, timeoutMs: this.config.agentTimeoutMs, onEvent: event => this.record(conversationId, channel, event) }),
-      review: diff => reviewMission({ missionId: conversationId, worktreePath, diff, plan, signal, timeoutMs: this.config.agentTimeoutMs }, { jev: this.jev }),
-      correct: prompt => this.correct(input, worktreePath, prompt),
-      record: event => this.record(conversationId, channel, event),
-      onReviewUsage: (run, startedAt) => this.addUsage(projectId, conversationId, channel, { label: "claude:opus (reviewer)", model: "opus", usage: run.usage, startedAt }),
-    });
+    );
     await this.record(conversationId, channel, {
       type: "mission:completed",
       level: "success",
@@ -252,6 +379,14 @@ export class MissionService {
       model: "opus",
       worktreePath,
       allowedTools: [...CLAUDE_TOOLS.planner],
+      permissionPolicy: new PermissionBroker(
+        "manual",
+        projectId,
+        conversationId,
+        worktreePath,
+        undefined,
+        (event) => this.record(conversationId, channel, event),
+      ).claudeOptions(CLAUDE_TOOLS.planner),
       maxTurns: 8,
       timeoutMs: this.config.agentTimeoutMs,
       signal,
@@ -274,7 +409,7 @@ export class MissionService {
     await channel.message("assistant", plan.plan);
 
     const conversation = this.registry.getConversation(projectId, conversationId);
-    if (plan.complexity === "complex") {
+    if (plan.complexity === "complex" && this.brokers.get(conversationId)?.mode === "autonomous") {
       const label = `codex:${this.config.defaultComplexModel}`;
       channel.routing({
         agent: label,
@@ -284,7 +419,12 @@ export class MissionService {
         confidence: 1,
         source: "planner",
       });
-      await channel.message("routing", `Opus: feature complexa -> ${this.config.defaultComplexModel}`, undefined, "plan.complex");
+      await channel.message(
+        "routing",
+        `Opus: feature complexa -> ${this.config.defaultComplexModel}`,
+        undefined,
+        "plan.complex",
+      );
       const started = Date.now();
       await this.record(conversationId, channel, {
         type: "agent:started",
@@ -293,6 +433,7 @@ export class MissionService {
         payload: { label, model: this.config.defaultComplexModel, role: "implementer" },
       });
       const run = await runCodexAgent({
+        ...codexPermissions(this.brokers.get(conversationId)?.mode ?? "autonomous"),
         prompt: workerPrompt + (this.context.get(conversationId) ?? ""),
         worktreePath,
         model: this.config.defaultComplexModel,
@@ -315,12 +456,22 @@ export class MissionService {
       channel.routing({
         agent: "claude:sonnet",
         model: "sonnet",
-        label: "feature mais simples",
+        label:
+          this.brokers.get(conversationId)?.mode === "assisted"
+            ? "implementação assistida"
+            : "feature mais simples",
         stage: "plan",
         confidence: 1,
         source: "planner",
       });
-      await channel.message("routing", "Opus: feature mais simples -> Sonnet", undefined, "plan.simple");
+      await channel.message(
+        "routing",
+        this.brokers.get(conversationId)?.mode === "assisted"
+          ? "Modo assistido: implementação com Sonnet e aprovação pontual"
+          : "Opus: feature mais simples -> Sonnet",
+        undefined,
+        "plan.simple",
+      );
       await this.runClaude({
         projectId,
         conversationId,
@@ -338,18 +489,58 @@ export class MissionService {
     return plan.plan;
   }
 
-  private async correct(input: MissionRunInput, worktreePath: string, prompt: string): Promise<void> {
+  private async correct(
+    input: MissionRunInput,
+    worktreePath: string,
+    prompt: string,
+  ): Promise<void> {
     const { projectId, conversationId, channel, signal } = input;
     const conversation = this.registry.getConversation(projectId, conversationId);
-    if (conversation?.activeAgent?.startsWith("codex:")) {
+    if (
+      conversation?.activeAgent?.startsWith("codex:") &&
+      this.brokers.get(conversationId)?.mode === "autonomous"
+    ) {
       const label = conversation.activeAgent;
       const startedAt = Date.now();
-      await this.record(conversationId, channel, { type: "agent:started", level: "info", message: `${label} (correction)`, payload: { role: "implementer" } });
-      const run = await runCodexAgent({ prompt: prompt + (this.context.get(conversationId) ?? ""), worktreePath, model: this.config.defaultComplexModel, timeoutMs: this.config.agentTimeoutMs, signal, resumeThreadId: conversation.codexThreadId, onEvent: event => this.streamCodex(conversationId, channel, event) });
-      await this.registry.updateConversation(projectId, conversationId, { codexThreadId: run.threadId });
-      await this.addUsage(projectId, conversationId, channel, { label, model: this.config.defaultComplexModel, usage: run.usage, startedAt });
+      await this.record(conversationId, channel, {
+        type: "agent:started",
+        level: "info",
+        message: `${label} (correction)`,
+        payload: { role: "implementer" },
+      });
+      const run = await runCodexAgent({
+        ...codexPermissions(this.brokers.get(conversationId)?.mode ?? "autonomous"),
+        prompt: prompt + (this.context.get(conversationId) ?? ""),
+        worktreePath,
+        model: this.config.defaultComplexModel,
+        timeoutMs: this.config.agentTimeoutMs,
+        signal,
+        resumeThreadId: conversation.codexThreadId,
+        onEvent: (event) => this.streamCodex(conversationId, channel, event),
+      });
+      await this.registry.updateConversation(projectId, conversationId, {
+        codexThreadId: run.threadId,
+      });
+      await this.addUsage(projectId, conversationId, channel, {
+        label,
+        model: this.config.defaultComplexModel,
+        usage: run.usage,
+        startedAt,
+      });
     } else {
-      await this.runClaude({ projectId, conversationId, channel, signal, worktreePath, prompt, model: "sonnet", label: "claude:sonnet (correction)", tools: [...CLAUDE_TOOLS.implementer], maxTurns: 20, sessionId: conversation?.claudeSessionId });
+      await this.runClaude({
+        projectId,
+        conversationId,
+        channel,
+        signal,
+        worktreePath,
+        prompt,
+        model: "sonnet",
+        label: "claude:sonnet (correction)",
+        tools: [...CLAUDE_TOOLS.implementer],
+        maxTurns: 20,
+        sessionId: conversation?.claudeSessionId,
+      });
     }
   }
 
@@ -378,6 +569,7 @@ export class MissionService {
       model: args.model,
       worktreePath: args.worktreePath,
       allowedTools: args.tools,
+      permissionPolicy: this.brokers.get(args.conversationId)?.claudeOptions(args.tools),
       maxTurns: args.maxTurns,
       timeoutMs: this.config.agentTimeoutMs,
       signal: args.signal,
@@ -415,8 +607,10 @@ export class MissionService {
       );
     }
     const baseBranch = project.baseBranch ?? (await currentBranch(root));
-    const branch = conversation.branch ?? `claudex/${project.id.slice(0, 6)}-${conversation.id.slice(0, 6)}`;
-    const worktreePath = conversation.worktreePath ?? path.join(this.worktreesBase, conversation.id);
+    const branch =
+      conversation.branch ?? `claudex/${project.id.slice(0, 6)}-${conversation.id.slice(0, 6)}`;
+    const worktreePath =
+      conversation.worktreePath ?? path.join(this.worktreesBase, conversation.id);
 
     await mkdir(this.worktreesBase, { recursive: true });
     const ready = existsSync(worktreePath) && existsSync(path.join(worktreePath, ".git"));
@@ -452,9 +646,18 @@ export class MissionService {
         costUsd: (conversation.costUsd ?? 0) + costUsd,
       });
     }
-    if (conversation?.worktreePath) {
-      const checkpoint = await this.checkpoints.create(conversationId, conversation.worktreePath, info.label);
-      await this.record(conversationId, channel, { type: "checkpoint:created", level: "info", message: `Checkpoint ${checkpoint.index}: ${info.label}`, payload: { checkpoint } });
+    if (conversation?.worktreePath && this.brokers.get(conversationId)?.mode !== "manual") {
+      const checkpoint = await this.checkpoints.create(
+        conversationId,
+        conversation.worktreePath,
+        info.label,
+      );
+      await this.record(conversationId, channel, {
+        type: "checkpoint:created",
+        level: "info",
+        message: `Checkpoint ${checkpoint.index}: ${info.label}`,
+        payload: { checkpoint },
+      });
     }
     const endedAt = Date.now();
     const agentRun: AgentRun = {
@@ -542,7 +745,8 @@ export class MissionService {
       void channel.message("system", `thread ${e.thread_id ?? "?"}`);
       return;
     }
-    if (e.type !== "item.completed" && e.type !== "item.started" && e.type !== "item.updated") return;
+    if (e.type !== "item.completed" && e.type !== "item.started" && e.type !== "item.updated")
+      return;
     const item = e.item;
     if (!item) return;
     if (item.type === "agent_message" && item.text) void channel.message("assistant", item.text);
@@ -571,7 +775,11 @@ function buildPlannerPrompt(task: string): string {
   ].join("\n");
 }
 
-function parsePlan(text: string): { complexity: "complex" | "simple"; plan: string; subtasks: string[] } {
+function parsePlan(text: string): {
+  complexity: "complex" | "simple";
+  plan: string;
+  subtasks: string[];
+} {
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start !== -1 && end > start) {

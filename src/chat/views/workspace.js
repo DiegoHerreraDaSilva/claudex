@@ -1,3 +1,4 @@
+import { autonomySelector } from "../components/autonomy.js";
 import { clear, el } from "../lib/dom.js";
 import { roleLabel, t } from "../lib/i18n.js";
 import {
@@ -18,7 +19,9 @@ export function renderWorkspace(root, actions) {
   clear(root);
   if (!project || !conversation) {
     const empty = el("div", { class: "view" });
-    empty.appendChild(el("div", { class: "empty-view" }, [el("div", { class: "empty", text: t("emptySelect") })]));
+    empty.appendChild(
+      el("div", { class: "empty-view" }, [el("div", { class: "empty", text: t("emptySelect") })]),
+    );
     root.appendChild(empty);
     return;
   }
@@ -35,15 +38,20 @@ export function renderWorkspace(root, actions) {
   else scroll.el.scrollTop = lastScrollTop;
   scroll.el.addEventListener("scroll", () => {
     lastScrollTop = scroll.el.scrollTop;
-    state.autoscroll = Math.abs(scroll.el.scrollHeight - scroll.el.scrollTop - scroll.el.clientHeight) < 40;
+    state.autoscroll =
+      Math.abs(scroll.el.scrollHeight - scroll.el.scrollTop - scroll.el.clientHeight) < 40;
   });
 }
 
 function renderHeader(project, conversation, actions) {
   const running = isRunning(conversation.id);
   const files = currentDiff()?.files ?? [];
-  const canAct = files.length > 0 && !running;
-  const canApply = canAct && (state.missionSummary ? state.missionSummary.status === "ready" : !conversation.validationRequired);
+  const canAct = files.length > 0 && !running && conversation.autonomy !== "manual";
+  const canApply =
+    canAct &&
+    (state.missionSummary
+      ? state.missionSummary.status === "ready"
+      : !conversation.validationRequired);
 
   const header = el("header", { class: "workspace-header" });
   const info = el("div", { class: "proj-info" });
@@ -65,6 +73,7 @@ function renderHeader(project, conversation, actions) {
 
   const actionsRow = el("div", { class: "header-actions" });
   actionsRow.append(
+    autonomySelector(actions),
     el("button", {
       class: "ghost-btn",
       text: t("stop"),
@@ -99,17 +108,35 @@ function renderPipeline(conversation) {
     { key: "stageReady", label: "ready" },
   ];
   const status = state.missionSummary?.status;
-  const indices = { planning: 0, implementing: 1, verifying: 2, reviewing: 3, ready: 4, applied: 4 };
+  const indices = {
+    planning: 0,
+    implementing: 1,
+    verifying: 2,
+    reviewing: 3,
+    ready: 4,
+    applied: 4,
+  };
   let activeIndex = indices[status] ?? (running ? 1 : hasDiff && !status ? 4 : -1);
   if (status === "failed") activeIndex = state.missionSummary.review ? 3 : 2;
 
   const strip = el("div", { class: "pipeline" });
   stages.forEach((stage, index) => {
-    const cls = status === "failed" && index === activeIndex ? "failed" : index < activeIndex ? "done" : index === activeIndex ? (running ? "active" : "current") : "pending";
-    strip.appendChild(el("div", { class: `pipeline-stage ${cls}` }, [
-      el("span", { class: "pipeline-dot" }),
-      el("span", { text: t(stage.key) }),
-    ]));
+    const cls =
+      status === "failed" && index === activeIndex
+        ? "failed"
+        : index < activeIndex
+          ? "done"
+          : index === activeIndex
+            ? running
+              ? "active"
+              : "current"
+            : "pending";
+    strip.appendChild(
+      el("div", { class: `pipeline-stage ${cls}` }, [
+        el("span", { class: "pipeline-dot" }),
+        el("span", { text: t(stage.key) }),
+      ]),
+    );
   });
   return strip;
 }
@@ -125,13 +152,18 @@ function renderTranscript(conversation, scroll) {
     const row = el("div", { class: `msg ${message.role}` });
     row.append(
       el("div", { class: "who", text: roleLabel(message.role) }),
-      el("div", { class: "bubble", text: message.meta ? `${message.text}\n${message.meta}` : message.text }),
+      el("div", {
+        class: "bubble",
+        text: message.meta ? `${message.text}\n${message.meta}` : message.text,
+      }),
     );
     container.appendChild(row);
   }
   if (isRunning(conversation.id)) {
     container.appendChild(
-      el("div", { class: "msg assistant typing" }, [el("div", { class: "bubble", text: t("thinking") })]),
+      el("div", { class: "msg assistant typing" }, [
+        el("div", { class: "bubble", text: t("thinking") }),
+      ]),
     );
   }
   return container;
@@ -167,7 +199,10 @@ function renderComposer(actions) {
       }
     },
   });
-  form.append(input, el("button", { class: "primary-btn send-btn", type: "submit", text: t("send") }));
+  form.append(
+    input,
+    el("button", { class: "primary-btn send-btn", type: "submit", text: t("send") }),
+  );
   requestAnimationFrame(() => autoGrow(input));
   return form;
 }

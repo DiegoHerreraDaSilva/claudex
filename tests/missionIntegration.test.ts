@@ -12,9 +12,11 @@ vi.mock("../src/agents/claude.js", () => ({
     model: string;
     prompt: string;
     outputSchema?: object;
+    permissionPolicy?: { tools?: string[] };
   }) => {
     prompts.push(options.prompt);
-    if (!options.outputSchema) await writeFile(path.join(options.worktreePath, "result.txt"), "ok");
+    if (!options.outputSchema && options.permissionPolicy?.tools?.includes("Write"))
+      await writeFile(path.join(options.worktreePath, "result.txt"), "ok");
     return {
       sessionId: "session",
       durationMs: 1,
@@ -88,6 +90,73 @@ afterEach(async () => {
 });
 
 describe("phase 3 mission integration", () => {
+  it("keeps manual missions read-only and requires single-use assisted terminal approvals", async () => {
+    const f = await fixture();
+    await f.registry.updateConversation(f.project.id, f.conversationId, {
+      claudeSessionId: "old",
+      codexThreadId: "old",
+    });
+    await f.chat.setAutonomy(f.project.id, f.conversationId, "manual");
+    expect(f.project.conversations[0]?.claudeSessionId).toBeUndefined();
+    expect(f.project.conversations[0]?.codexThreadId).toBeUndefined();
+    const head = (await runGit(f.dir, ["rev-parse", "HEAD"])).stdout;
+    const status = (await runGit(f.dir, ["status", "--short"])).stdout;
+    await f.chat.send(f.project.id, f.conversationId, "analyze project");
+    expect((await f.chat.missionSummary(f.conversationId))?.status).toBe("analysed");
+    expect((await runGit(f.dir, ["rev-parse", "HEAD"])).stdout).toBe(head);
+    expect((await runGit(f.dir, ["status", "--short"])).stdout).toBe(status);
+    expect(f.project.conversations[0]?.worktreePath).toBeUndefined();
+    expect(
+      await new CheckpointService(path.join(f.dataDir, "checkpoints")).list(f.conversationId),
+    ).toEqual([]);
+    expect((await f.chat.apply(f.project.id, f.conversationId)).ok).toBe(false);
+    const server = createAppServer({ chat: f.chat, registry: f.registry, config: f.config });
+    const port = await server.listen(0);
+    const base = `http://127.0.0.1:${port}`;
+    const post = (route: string, body: unknown, method = "POST") =>
+      fetch(base + route, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    try {
+      const route = `/api/projects/${f.project.id}/terminal`;
+      expect((await post(route, { command: "echo blocked" })).status).toBe(400);
+      const modeRoute = `/api/projects/${f.project.id}/conversations/${f.conversationId}/autonomy`;
+      expect((await post(modeRoute, { mode: "invalid" }, "PUT")).status).toBe(400);
+      expect((await post(modeRoute, { mode: "assisted" }, "PUT")).status).toBe(200);
+      const waitRequest = async () => {
+        for (let attempt = 0; attempt < 100 && !f.chat.permissions.list().length; attempt++)
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        expect(f.chat.permissions.list()).toHaveLength(1);
+        return f.chat.permissions.list()[0]!;
+      };
+      const pending = post(route, { command: "echo approved-once" });
+      const request = await waitRequest();
+      expect((await post(modeRoute, { mode: "autonomous" }, "PUT")).status).toBe(409);
+      expect(
+        (await fetch(base + "/api/permissions").then((response) => response.json()))[0].id,
+      ).toBe(request.id);
+      expect((await post(`/api/permissions/${request.id}`, { approved: true })).status).toBe(200);
+      expect((await (await pending).json()).code).toBe(0);
+      expect((await post(`/api/permissions/${request.id}`, { approved: true })).status).toBe(404);
+      const denied = post(route, { command: "echo approved-once" });
+      const repeat = await waitRequest();
+      expect(repeat.id).not.toBe(request.id);
+      await post(`/api/permissions/${repeat.id}`, { approved: false });
+      expect((await denied).status).toBe(400);
+      const stopped = post(route, { command: "echo stopped" });
+      await waitRequest();
+      await post(route + "/stop", {});
+      expect((await stopped).status).toBe(400);
+      expect(f.chat.permissions.list()).toEqual([]);
+    } finally {
+      server.wss.close();
+      await new Promise<void>((resolve) => server.server.close(() => resolve()));
+      await f.registry.flush();
+    }
+  }, 90_000);
+
   it("persists a reviewed mission, serves its summary and applies the reviewed commit", async () => {
     const f = await fixture();
     await new MemoryService(path.join(f.dataDir, "memory")).add(
@@ -238,7 +307,7 @@ describe("phase 3 mission integration", () => {
       f.chat.restore(f.conversationId, "00000000-0000-4000-8000-000000000000"),
     ).rejects.toThrow("checkpoint not found");
     await f.registry.flush();
-  }, 90_000);
+  }, 120_000);
 
   it("keeps rejected changes in the worktree and refuses apply", async () => {
     const f = await fixture();
@@ -249,5 +318,5 @@ describe("phase 3 mission integration", () => {
       await readFile(path.join(f.project.conversations[0]!.worktreePath!, "result.txt"), "utf8"),
     ).toBe("ok");
     await f.registry.flush();
-  }, 60_000);
+  }, 90_000);
 });

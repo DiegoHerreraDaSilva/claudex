@@ -1,5 +1,5 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { Options, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import {
   AgentError,
   type AgentRunResult,
@@ -9,6 +9,17 @@ import {
 } from "./types.js";
 
 export interface RunClaudeAgentOptions {
+  permissionPolicy?: Pick<
+    Options,
+    | "permissionMode"
+    | "allowDangerouslySkipPermissions"
+    | "tools"
+    | "allowedTools"
+    | "disallowedTools"
+    | "canUseTool"
+    | "hooks"
+    | "settingSources"
+  >;
   prompt: string;
   model: ClaudeModel;
   worktreePath: string;
@@ -128,6 +139,7 @@ export async function runClaudeAgent(
         ...(options.allowedTools ? { allowedTools: options.allowedTools } : {}),
         ...(options.tools ? { tools: options.tools } : {}),
         ...(options.disallowedTools ? { disallowedTools: options.disallowedTools } : {}),
+        ...options.permissionPolicy,
         ...(options.resumeSessionId ? { resume: options.resumeSessionId } : {}),
         ...(options.outputSchema
           ? { outputFormat: { type: "json_schema" as const, schema: options.outputSchema } }
@@ -141,9 +153,10 @@ export async function runClaudeAgent(
       if (id) sessionId = id;
       if (message.type === "result") {
         if (message.subtype === "success") {
-          resultText = options.outputSchema && message.structured_output !== undefined
-            ? JSON.stringify(message.structured_output)
-            : message.result;
+          resultText =
+            options.outputSchema && message.structured_output !== undefined
+              ? JSON.stringify(message.structured_output)
+              : message.result;
           usage = readUsage(message);
         } else {
           failure = message.subtype;

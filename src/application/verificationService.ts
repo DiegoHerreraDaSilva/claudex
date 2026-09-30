@@ -12,6 +12,7 @@ export interface VerificationOptions {
   timeoutMs?: number;
   signal?: AbortSignal;
   onEvent?: (event: MissionEventInput) => Promise<void>;
+  authorize?: (kind: VerificationKind, command: string) => Promise<boolean>;
   run?: (command: string, args: string[], options: CommandOptions) => Promise<CommandResult>;
 }
 
@@ -82,6 +83,11 @@ export async function verifyMission(options: VerificationOptions): Promise<Verif
             ? "No npm lockfile"
             : `No ${script} script or local compiler`,
       });
+    } else if (
+      options.authorize &&
+      !(await options.authorize(kind, [command, ...args].join(" ")))
+    ) {
+      Object.assign(item, { status: "skipped", summary: "Blocked by autonomy policy" });
     } else {
       try {
         const result = await (options.run ?? runCommand)(command, args, {

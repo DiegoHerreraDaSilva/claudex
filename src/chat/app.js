@@ -1,10 +1,34 @@
+import {
+  setAutonomy,
+  permissionNotice,
+  permissionSnapshot,
+  permissionMatrix,
+} from "./components/autonomy.js";
 import { renderTerminal, terminalEvent } from "./views/terminal.js";
-import { ensureTools, refreshTools, renderProjectTools, renderContext, toolEvent } from "./views/projectTools.js";
+import {
+  ensureTools,
+  refreshTools,
+  renderProjectTools,
+  renderContext,
+  toolEvent,
+} from "./views/projectTools.js";
 import * as api from "./lib/api.js";
 import { applyStatic, getLang, initLang, setLang, t, THEME_KEY } from "./lib/i18n.js";
 import { initSocket, isConnected, send as socketSend } from "./lib/socket.js";
-import { currentConversation, currentProject, notify, patch, state, subscribe } from "./lib/store.js";
-import { initPalette, openPalette, paletteOpen, closePalette } from "./components/commandPalette.js";
+import {
+  currentConversation,
+  currentProject,
+  notify,
+  patch,
+  state,
+  subscribe,
+} from "./lib/store.js";
+import {
+  initPalette,
+  openPalette,
+  paletteOpen,
+  closePalette,
+} from "./components/commandPalette.js";
 import { confirmModal } from "./components/confirm.js";
 import { previewModal } from "./components/previewModal.js";
 import { toast } from "./components/toast.js";
@@ -21,6 +45,7 @@ const viewHost = document.getElementById("view-host");
 let modals;
 
 const actions = {
+  setAutonomy: (mode) => setAutonomy(mode, loadProjects),
   selectProject,
   openWorkspace,
   selectConversation,
@@ -50,6 +75,8 @@ function renderAll() {
   renderInspector();
   renderContext();
   renderTerminal();
+  const matrixHost = document.getElementById("permission-matrix");
+  if (matrixHost) matrixHost.replaceChildren(permissionMatrix());
 }
 
 function renderView() {
@@ -106,13 +133,20 @@ async function loadSnapshot(projectId) {
 function ensureMissionEvents() {
   const conversationId = state.currentConversationId;
   if (!conversationId || state.missionEventsFor === conversationId) return;
-  patch({ missionEvents: [], missionEventsFor: conversationId, missionSummary: null, missionSummaryError: false });
+  patch({
+    missionEvents: [],
+    missionEventsFor: conversationId,
+    missionSummary: null,
+    missionSummaryError: false,
+  });
   loadMissionSummary(conversationId);
   api
     .getMissionEvents(conversationId)
     .then((events) => {
       if (state.currentConversationId === conversationId) {
-        const merged = new Map([...events, ...state.missionEvents].map(event => [event.id, event]));
+        const merged = new Map(
+          [...events, ...state.missionEvents].map((event) => [event.id, event]),
+        );
         patch({ missionEvents: [...merged.values()].sort((a, b) => a.at - b.at) });
       }
     })
@@ -123,7 +157,8 @@ async function loadMissionSummary(conversationId) {
   try {
     const summary = await api.getMissionSummary(conversationId);
     if (state.currentConversationId !== conversationId) return;
-    if (!state.missionSummary || (summary?.revision ?? 0) >= (state.missionSummary.revision ?? 0)) patch({ missionSummary: summary, missionSummaryError: false });
+    if (!state.missionSummary || (summary?.revision ?? 0) >= (state.missionSummary.revision ?? 0))
+      patch({ missionSummary: summary, missionSummaryError: false });
   } catch {
     if (state.currentConversationId === conversationId) patch({ missionSummaryError: true });
   }
@@ -133,8 +168,13 @@ function fixAutomatically() {
   const summary = state.missionSummary;
   if (!summary || isRunningMission()) return;
   const issues = [
-    ...summary.verification.filter(run => run.status === "failed").map(run => `${run.kind}: ${run.summary}\n${(run.output ?? "").slice(-4000)}`),
-    ...(summary.review?.findings ?? []).map(finding => `${finding.file ?? ""}${finding.line ? `:${finding.line}` : ""}: ${finding.message}`),
+    ...summary.verification
+      .filter((run) => run.status === "failed")
+      .map((run) => `${run.kind}: ${run.summary}\n${(run.output ?? "").slice(-4000)}`),
+    ...(summary.review?.findings ?? []).map(
+      (finding) =>
+        `${finding.file ?? ""}${finding.line ? `:${finding.line}` : ""}: ${finding.message}`,
+    ),
     summary.error ?? "",
   ].filter(Boolean);
   send(`${t("fixPrompt")}\n${summary.title}\n\n${issues.join("\n")}`);
@@ -148,8 +188,7 @@ async function selectProject(projectId) {
   const project = state.projects.find((item) => item.id === projectId);
   patch({
     currentProjectId: projectId,
-    currentConversationId:
-      project?.activeConversationId ?? project?.conversations?.[0]?.id ?? null,
+    currentConversationId: project?.activeConversationId ?? project?.conversations?.[0]?.id ?? null,
     view: "workspace",
     snapshot: null,
   });
@@ -225,7 +264,8 @@ async function startMission(text) {
 async function beginMission(text) {
   const project = currentProject();
   if (!project) return;
-  let conversationId = state.currentConversationId ?? project.activeConversationId ?? project.conversations?.[0]?.id;
+  let conversationId =
+    state.currentConversationId ?? project.activeConversationId ?? project.conversations?.[0]?.id;
   if (!conversationId) {
     socketSend({ type: "conversation:create", projectId: project.id });
     toast(t("newConversation"));
@@ -273,7 +313,20 @@ function chatAction(action) {
   const conversation = currentConversation();
   if (!project || !conversation || state.running.has(conversation.id)) return;
   if (action === "discard") {
-    confirmModal({ title: t("discard"), body: t("confirmDiscard"), confirmLabel: t("discard"), cancelLabel: t("cancel"), danger: true, onConfirm: () => socketSend({ type: "chat:action", projectId: project.id, conversationId: conversation.id, action }) });
+    confirmModal({
+      title: t("discard"),
+      body: t("confirmDiscard"),
+      confirmLabel: t("discard"),
+      cancelLabel: t("cancel"),
+      danger: true,
+      onConfirm: () =>
+        socketSend({
+          type: "chat:action",
+          projectId: project.id,
+          conversationId: conversation.id,
+          action,
+        }),
+    });
     return;
   }
   socketSend({
@@ -290,6 +343,12 @@ function comingSoon() {
 
 function onMessage(msg) {
   switch (msg.type) {
+    case "permissions":
+      permissionSnapshot(msg.data ?? []);
+      break;
+    case "permission:notice":
+      permissionNotice(msg.notice);
+      break;
     case "terminal:out":
       terminalEvent(msg);
       break;
@@ -321,21 +380,28 @@ function onMessage(msg) {
       break;
     case "chat:message": {
       if (msg.projectId !== state.currentProjectId || !state.snapshot) break;
-      const conversation = state.snapshot.project.conversations.find((item) => item.id === msg.conversationId);
+      const conversation = state.snapshot.project.conversations.find(
+        (item) => item.id === msg.conversationId,
+      );
       if (conversation) conversation.messages.push(msg.message);
       notify();
       break;
     }
     case "chat:routing": {
       if (msg.projectId !== state.currentProjectId) break;
-      const conversation = state.snapshot?.project?.conversations?.find((item) => item.id === msg.conversationId);
+      const conversation = state.snapshot?.project?.conversations?.find(
+        (item) => item.id === msg.conversationId,
+      );
       if (conversation) conversation.activeAgent = msg.agent;
       notify();
       break;
     }
     case "chat:turn": {
       if (msg.status === "started") state.running.add(msg.conversationId);
-      else { state.running.delete(msg.conversationId); if (msg.projectId === state.currentProjectId) refreshTools(); }
+      else {
+        state.running.delete(msg.conversationId);
+        if (msg.projectId === state.currentProjectId) refreshTools();
+      }
       notify();
       break;
     }
@@ -353,22 +419,37 @@ function onMessage(msg) {
     }
     case "chat:error": {
       if (msg.projectId !== state.currentProjectId || !state.snapshot) break;
-      const conversation = state.snapshot.project.conversations.find((item) => item.id === msg.conversationId);
+      const conversation = state.snapshot.project.conversations.find(
+        (item) => item.id === msg.conversationId,
+      );
       if (conversation) {
-        conversation.messages.push({ id: String(Date.now()), at: Date.now(), role: "error", text: msg.error });
+        conversation.messages.push({
+          id: String(Date.now()),
+          at: Date.now(),
+          role: "error",
+          text: msg.error,
+        });
       }
       notify();
       break;
     }
     case "mission:summary": {
       const summary = msg.summary;
-      if (summary?.id === state.currentConversationId && (!state.missionSummary || summary.revision >= state.missionSummary.revision)) {
+      if (
+        summary?.id === state.currentConversationId &&
+        (!state.missionSummary || summary.revision >= state.missionSummary.revision)
+      ) {
         patch({ missionSummary: summary, missionSummaryError: false });
       }
       break;
     }
     case "chat:action:result": {
-      if (msg.projectId === state.currentProjectId && msg.conversationId === state.currentConversationId && !msg.ok) toast(msg.reason || t("actionFailed"));
+      if (
+        msg.projectId === state.currentProjectId &&
+        msg.conversationId === state.currentConversationId &&
+        !msg.ok
+      )
+        toast(msg.reason || t("actionFailed"));
       break;
     }
     case "mission:event": {
@@ -407,7 +488,8 @@ function initTheme() {
 }
 
 function toggleTheme() {
-  const current = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+  const current =
+    document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
   const next = current === "dark" ? "light" : "dark";
   try {
     localStorage.setItem(THEME_KEY, next);
@@ -434,19 +516,28 @@ function buildCommands() {
     { label: t("cmdRunTests"), run: comingSoon },
     { label: t("cmdCreateCheckpoint"), run: comingSoon },
     { label: t("cmdAskRepo"), run: comingSoon },
-    { label: t("cmdChangeAutonomy"), run: comingSoon },
+    ...["manual", "assisted", "autonomous"].map((mode) => ({
+      label: `${t("cmdChangeAutonomy")}: ${t(`autonomy${mode}`)}`,
+      run: () => actions.setAutonomy(mode),
+    })),
     { label: t("cmdInterrupt"), run: stop },
     { label: t("cmdOpenSettings"), run: () => modals?.openSettings() },
     { label: t("cmdToggleTheme"), run: toggleTheme },
     { label: t("cmdToggleLang"), run: toggleLang },
   ];
   for (const project of state.projects) {
-    commands.push({ label: `${t("cmdSwitchProject")}: ${project.name}`, run: () => actions.selectProject(project.id) });
+    commands.push({
+      label: `${t("cmdSwitchProject")}: ${project.name}`,
+      run: () => actions.selectProject(project.id),
+    });
   }
   const project = currentProject();
   if (project) {
     for (const conversation of project.conversations ?? []) {
-      commands.push({ label: `↳ ${conversation.name}`, run: () => actions.selectConversation(conversation.id) });
+      commands.push({
+        label: `↳ ${conversation.name}`,
+        run: () => actions.selectConversation(conversation.id),
+      });
     }
   }
   return commands;
@@ -502,6 +593,7 @@ function initResizers() {
 
 function initShortcuts() {
   window.addEventListener("keydown", (event) => {
+    if (document.querySelector(".permission-dialog[open]")) return;
     const mod = event.ctrlKey || event.metaKey;
     if (mod && event.key.toLowerCase() === "k") {
       event.preventDefault();
@@ -530,10 +622,14 @@ function initShortcuts() {
 }
 
 function initFooter() {
-  document.getElementById("inspector-close")?.addEventListener("click", () => document.body.classList.remove("inspector-open"));
+  document
+    .getElementById("inspector-close")
+    ?.addEventListener("click", () => document.body.classList.remove("inspector-open"));
   document.getElementById("theme-toggle")?.addEventListener("click", toggleTheme);
   document.getElementById("lang-toggle")?.addEventListener("click", toggleLang);
-  document.getElementById("palette-btn")?.addEventListener("click", () => openPalette(buildCommands()));
+  document
+    .getElementById("palette-btn")
+    ?.addEventListener("click", () => openPalette(buildCommands()));
   document.getElementById("brand-home")?.addEventListener("click", () => actions.setView("home"));
   document.querySelectorAll("#inspector-tabs .tab").forEach((tab) => {
     tab.addEventListener("click", () => switchInspectorTab(tab.dataset.tab));

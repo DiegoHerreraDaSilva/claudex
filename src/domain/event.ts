@@ -1,5 +1,6 @@
 export type MissionEventType =
   | "mission:started"
+  | "mission:permission"
   | "mission:applied"
   | "mission:completed"
   | "mission:failed"

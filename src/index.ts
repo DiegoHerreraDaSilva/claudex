@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import process from "node:process";
+import { isAutonomy } from "./application/permissionBroker.js";
+import type { AutonomyMode } from "./domain/mission.js";
 import chalk from "chalk";
 import { getConfig, setEnvValues } from "./config.js";
 import { runAccountAction } from "./accounts.js";
@@ -11,7 +13,11 @@ import { JevClient } from "./jev.js";
 import { Orchestrator, type Subtask } from "./orchestrator.js";
 import { attachRealtime, type RealtimeHooks } from "./server/ws.js";
 import { createStaticServer } from "./server/static.js";
-import { checkPrerequisites, getCredentialStatus, type PrerequisiteReport } from "./prerequisites.js";
+import {
+  checkPrerequisites,
+  getCredentialStatus,
+  type PrerequisiteReport,
+} from "./prerequisites.js";
 import { WorktreeManager } from "./worktree.js";
 import type { TaskSnapshot } from "./events.js";
 
@@ -23,6 +29,7 @@ const bad = chalk.red;
 const dim = chalk.gray;
 
 interface CliArgs {
+  autonomy?: AutonomyMode;
   command: string;
   positional: string[];
   subtasks?: Subtask[];
@@ -32,7 +39,13 @@ interface CliArgs {
 }
 
 function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = { command: "", positional: [], cleanup: false, dryRun: false, noServer: false };
+  const args: CliArgs = {
+    command: "",
+    positional: [],
+    cleanup: false,
+    dryRun: false,
+    noServer: false,
+  };
   const rest = argv.slice(2);
   const first = rest[0];
   if (!first || first.startsWith("-")) {
@@ -45,7 +58,11 @@ function parseArgs(argv: string[]): CliArgs {
     if (token === "--cleanup") args.cleanup = true;
     else if (token === "--dry-run") args.dryRun = true;
     else if (token === "--no-server") args.noServer = true;
-    else if (token === "--subtasks") {
+    else if (token === "--autonomy") {
+      const mode = rest[++i];
+      if (!isAutonomy(mode)) throw new Error("--autonomy requires manual, assisted or autonomous");
+      args.autonomy = mode;
+    } else if (token === "--subtasks") {
       const value = rest[++i];
       if (!value) throw new Error("--subtasks requires a JSON argument");
       args.subtasks = parseSubtasks(value);
@@ -58,12 +75,19 @@ function parseArgs(argv: string[]): CliArgs {
 
 function parseSubtasks(value: string): Subtask[] {
   const parsed = JSON.parse(value) as unknown;
-  if (!Array.isArray(parsed)) throw new Error("--subtasks must be a JSON array of strings or {description} objects");
+  if (!Array.isArray(parsed))
+    throw new Error("--subtasks must be a JSON array of strings or {description} objects");
   return parsed.map((entry) => {
     if (typeof entry === "string") return { description: entry };
-    if (typeof entry === "object" && entry !== null && typeof (entry as { description?: unknown }).description === "string") {
+    if (
+      typeof entry === "object" &&
+      entry !== null &&
+      typeof (entry as { description?: unknown }).description === "string"
+    ) {
       const obj = entry as { id?: string; description: string };
-      return obj.id ? { id: obj.id, description: obj.description } : { description: obj.description };
+      return obj.id
+        ? { id: obj.id, description: obj.description }
+        : { description: obj.description };
     }
     throw new Error("each subtask must be a string or an object with a description");
   });
@@ -72,7 +96,12 @@ function parseSubtasks(value: string): Subtask[] {
 function printChecks(report: PrerequisiteReport): void {
   console.log(chalk.bold("\nPrerequisites"));
   for (const check of report.checks) {
-    const tag = check.status === "ok" ? ok("  ok  ") : check.status === "warn" ? warn(" warn ") : bad(" fail ");
+    const tag =
+      check.status === "ok"
+        ? ok("  ok  ")
+        : check.status === "warn"
+          ? warn(" warn ")
+          : bad(" fail ");
     console.log(`${tag} ${chalk.bold(check.name)} ${dim("-")} ${check.detail}`);
   }
   console.log("");
@@ -129,7 +158,9 @@ function wireConsole(orchestrator: Orchestrator): void {
   });
   orchestrator.on("task:completed", (e) => {
     console.log(
-      ok(`[done] ${e.taskId.slice(0, 8)} in ${(e.durationMs / 1000).toFixed(1)}s, ${e.diff.split("\n").length} diff lines`),
+      ok(
+        `[done] ${e.taskId.slice(0, 8)} in ${(e.durationMs / 1000).toFixed(1)}s, ${e.diff.split("\n").length} diff lines`,
+      ),
     );
   });
   orchestrator.on("task:failed", (e) => {
@@ -162,13 +193,15 @@ async function startServer(orchestrator: Orchestrator, port: number): Promise<vo
 async function commandRun(args: CliArgs): Promise<number> {
   const description = args.positional.join(" ").trim();
   if (!description && (!args.subtasks || args.subtasks.length === 0)) {
-    console.error(bad("Usage: claudex run \"<description>\" [--subtasks <json>] [--cleanup] [--dry-run]"));
+    console.error(
+      bad('Usage: claudex run "<description>" [--subtasks <json>] [--cleanup] [--dry-run]'),
+    );
     return 2;
   }
   const config = getConfig();
   const report = await checkPrerequisites(config, {
     requireClaude: !args.dryRun,
-    requireCodex: !args.dryRun,
+    requireCodex: !args.dryRun && (!args.autonomy || args.autonomy === "autonomous"),
   });
   printChecks(report);
   if (!report.ok) {
@@ -189,6 +222,7 @@ async function commandRun(args: CliArgs): Promise<number> {
   }
 
   const result = await orchestrator.execute({
+    autonomy: args.autonomy,
     description: description || "fleet",
     subtasks: args.subtasks,
     cleanup: args.cleanup,
@@ -199,7 +233,11 @@ async function commandRun(args: CliArgs): Promise<number> {
   renderStatus(result.snapshot);
   console.log("");
   if (args.dryRun) {
-    console.log(warn(`Dry run: routed ${result.taskIds.length} subtask(s), parallel=${result.parallelized}. No agents executed.`));
+    console.log(
+      warn(
+        `Dry run: routed ${result.taskIds.length} subtask(s), parallel=${result.parallelized}. No agents executed.`,
+      ),
+    );
   } else {
     console.log(ok(`Fleet complete. merged=${result.merged.length}/${result.taskIds.length}`));
   }
@@ -288,7 +326,7 @@ function commandHelp(): number {
     [
       chalk.bold("Claudex"),
       "",
-      "  claudex run \"<description>\"   full flow: route, execute in worktrees, review, merge",
+      '  claudex run "<description>"   full flow: route, execute in worktrees, review, merge',
       "  claudex dashboard            start WS + HTTP dashboard server (works while idle)",
       "  claudex app                  start the chat app (projects + continuous sessions)",
       "  claudex status               print the current fleet snapshot",
@@ -296,9 +334,10 @@ function commandHelp(): number {
       "  claudex clean                remove orphan worktrees and branches",
       "",
       "Options for `run`:",
-      "  --subtasks <json>        manual subtasks, e.g. '[\"a\",\"b\"]'",
+      '  --subtasks <json>        manual subtasks, e.g. \'["a","b"]\'',
       "  --cleanup                remove worktrees after finishing",
       "  --dry-run                ask Jev for routing only, run no agents",
+      "  --autonomy MODE          manual, assisted or autonomous (default)",
       "  --no-server              do not start the dashboard during run",
     ].join("\n"),
   );
@@ -343,6 +382,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err: unknown) => {
-  console.error(bad(`Fatal: ${err instanceof Error ? err.stack ?? err.message : String(err)}`));
+  console.error(bad(`Fatal: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`));
   process.exit(1);
 });

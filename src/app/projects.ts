@@ -1,8 +1,9 @@
+import type { AutonomyMode } from "../domain/mission.js";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { v4 as uuid } from "uuid";
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export type ChatRole = "user" | "system" | "assistant" | "tool" | "result" | "error" | "routing";
 
@@ -29,6 +30,7 @@ export interface Conversation {
   usage?: { inputTokens: number; outputTokens: number; runs: number };
   costUsd?: number;
   validationRequired?: boolean;
+  autonomy?: AutonomyMode;
 }
 
 export interface Project {
@@ -51,6 +53,7 @@ export interface ConversationSummary {
   branch?: string;
   costUsd?: number;
   validationRequired?: boolean;
+  autonomy?: AutonomyMode;
 }
 
 export interface ProjectSummary {
@@ -93,6 +96,21 @@ export class ProjectRegistry {
     try {
       const raw = await readFile(this.file, "utf8");
       const parsed = JSON.parse(raw) as ProjectStore | LegacyProject[];
+      if (
+        !parsed ||
+        typeof parsed !== "object" ||
+        (!Array.isArray(parsed) && !Array.isArray(parsed.projects))
+      )
+        throw new Error("Invalid project store");
+      const version = Array.isArray(parsed) ? 1 : (parsed.schemaVersion ?? 0);
+      if (version > SCHEMA_VERSION) throw new Error("Unsupported project schema version");
+      if (version < SCHEMA_VERSION)
+        await writeFile(path.join(this.dir, `projects.schema-${version}.backup.json`), raw, {
+          encoding: "utf8",
+          flag: "wx",
+        }).catch((error) => {
+          if (error.code !== "EEXIST") throw error;
+        });
       if (Array.isArray(parsed)) {
         this.projects = parsed.map((p) => migrateProject(p));
         this.schemaVersion = 1;
@@ -102,7 +120,8 @@ export class ProjectRegistry {
         );
         this.schemaVersion = typeof parsed.schemaVersion === "number" ? parsed.schemaVersion : 0;
       }
-    } catch {
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       this.projects = [];
       this.schemaVersion = SCHEMA_VERSION;
     }
@@ -173,7 +192,9 @@ export class ProjectRegistry {
   async createConversation(projectId: string, name?: string): Promise<Conversation | undefined> {
     const project = this.get(projectId);
     if (!project) return undefined;
-    const conversation = newConversation(name?.trim() || `Chat ${project.conversations.length + 1}`);
+    const conversation = newConversation(
+      name?.trim() || `Chat ${project.conversations.length + 1}`,
+    );
     project.conversations.push(conversation);
     project.activeConversationId = conversation.id;
     this.scheduleSave();
@@ -207,7 +228,10 @@ export class ProjectRegistry {
     this.scheduleSave();
   }
 
-  async deleteConversation(projectId: string, conversationId: string): Promise<Conversation | undefined> {
+  async deleteConversation(
+    projectId: string,
+    conversationId: string,
+  ): Promise<Conversation | undefined> {
     const project = this.get(projectId);
     if (!project) return undefined;
     const index = project.conversations.findIndex((c) => c.id === conversationId);
@@ -252,6 +276,7 @@ export class ProjectRegistry {
         name: conversation.name,
         createdAt: conversation.createdAt,
         messageCount: conversation.messages.length,
+        autonomy: conversation.autonomy ?? "autonomous",
         running: runningConversations.has(conversation.id),
         ...(conversation.activeAgent ? { activeAgent: conversation.activeAgent } : {}),
         ...(conversation.branch ? { branch: conversation.branch } : {}),
@@ -265,14 +290,16 @@ export class ProjectRegistry {
         running: conversations.some((c) => c.running),
         conversations,
         ...(project.baseBranch ? { baseBranch: project.baseBranch } : {}),
-        ...(project.activeConversationId ? { activeConversationId: project.activeConversationId } : {}),
+        ...(project.activeConversationId
+          ? { activeConversationId: project.activeConversationId }
+          : {}),
       };
     });
   }
 }
 
 function newConversation(name: string): Conversation {
-  return { id: uuid(), name, createdAt: Date.now(), messages: [] };
+  return { id: uuid(), name, createdAt: Date.now(), messages: [], autonomy: "autonomous" };
 }
 
 function migrateProject(project: LegacyProject): Project {
@@ -283,6 +310,7 @@ function migrateProject(project: LegacyProject): Project {
     conversations.push({
       id: uuid(),
       name: "Chat 1",
+      autonomy: "autonomous",
       createdAt: project.createdAt ?? Date.now(),
       messages: Array.isArray(project.messages) ? project.messages : [],
       ...(project.claudeSessionId ? { claudeSessionId: project.claudeSessionId } : {}),
@@ -308,8 +336,16 @@ function migrateProject(project: LegacyProject): Project {
 }
 
 function normalizeConversation(conversation: Conversation): Conversation {
+  if (
+    conversation.autonomy !== undefined &&
+    !["manual", "assisted", "autonomous"].includes(conversation.autonomy)
+  )
+    throw new Error("Invalid autonomy mode");
   return {
     ...conversation,
+    autonomy: ["manual", "assisted", "autonomous"].includes(conversation.autonomy ?? "")
+      ? conversation.autonomy
+      : "autonomous",
     messages: Array.isArray(conversation.messages) ? conversation.messages : [],
   };
 }

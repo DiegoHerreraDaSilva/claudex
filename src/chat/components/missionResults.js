@@ -1,6 +1,6 @@
 import { el } from "../lib/dom.js";
 import { t } from "../lib/i18n.js";
-import { currentDiff, isRunning, state } from "../lib/store.js";
+import { currentConversation, currentDiff, isRunning, state } from "../lib/store.js";
 
 const LABELS = {
   typecheck: "verifyTypecheck",
@@ -16,11 +16,21 @@ export function renderMissionResults(actions) {
   const summary = state.missionSummary;
   if (state.missionSummaryError) {
     host.appendChild(el("div", { class: "empty", role: "alert", text: t("missionSummaryError") }));
-    host.appendChild(el("button", { class: "ghost-btn", text: t("retry"), onclick: () => actions.reloadMissionSummary() }));
+    host.appendChild(
+      el("button", {
+        class: "ghost-btn",
+        text: t("retry"),
+        onclick: () => actions.reloadMissionSummary(),
+      }),
+    );
     return host;
   }
   host.appendChild(renderVerification(summary));
   host.appendChild(renderReview(summary, actions));
+  if (summary?.status === "analysed") {
+    host.appendChild(el("p", { text: t("manualAnalysis") }));
+    return host;
+  }
   if (summary && ["ready", "failed", "cancelled", "applied"].includes(summary.status))
     host.appendChild(renderCompletion(summary, actions));
   return host;
@@ -152,7 +162,10 @@ function renderCompletion(summary, actions) {
       ]),
     );
   if (["ready", "failed"].includes(summary.status)) {
-    const canAct = !isRunning(summary.id) && (currentDiff()?.files?.length ?? 0) > 0;
+    const canAct =
+      currentConversation()?.autonomy !== "manual" &&
+      !isRunning(summary.id) &&
+      (currentDiff()?.files?.length ?? 0) > 0;
     card.appendChild(
       el("div", { class: "completion-actions" }, [
         el("button", {

@@ -106,7 +106,7 @@ export function projectMissionEvent(
       summary.review = payload.review as Review | undefined;
       break;
     case "mission:completed":
-      summary.status = "ready";
+      summary.status = payload.readOnly ? "analysed" : "ready";
       summary.finishedAt = event.at;
       break;
     case "mission:failed":

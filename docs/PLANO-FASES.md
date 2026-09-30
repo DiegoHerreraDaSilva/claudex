@@ -3,7 +3,7 @@
 > Documento de handoff. Descreve o estado atual do projeto e o plano detalhado
 > para continuar o desenvolvimento em outras sessões.
 > Última atualização: 30/09/2026, após a implementação da Fase 4.
-> Próxima etapa: Fase 5. Ver [entrega da Fase 4](FASE-4.md).
+> Fase 5 concluída localmente. Próxima etapa: Fase 6. Ver [entrega da Fase 5](FASE-5.md).
 
 ---
 

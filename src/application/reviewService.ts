@@ -1,3 +1,4 @@
+import { PermissionBroker } from "./permissionBroker.js";
 import { v4 as uuid } from "uuid";
 import { z } from "zod";
 import { CLAUDE_TOOLS, runClaudeAgent } from "../agents/claude.js";
@@ -69,6 +70,12 @@ export async function reviewMission(
       worktreePath: options.worktreePath,
       allowedTools: [...CLAUDE_TOOLS.reviewer],
       tools: [...CLAUDE_TOOLS.reviewer],
+      permissionPolicy: new PermissionBroker(
+        "manual",
+        "review",
+        options.missionId,
+        options.worktreePath,
+      ).claudeOptions(CLAUDE_TOOLS.reviewer),
       maxTurns: 5,
       timeoutMs: Math.min(options.timeoutMs, 180_000),
       signal: options.signal,

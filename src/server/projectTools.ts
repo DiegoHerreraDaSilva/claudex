@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
+import { commandAction } from "../application/permissionBroker.js";
 import { z } from "zod";
 import type { ChatService } from "../app/chat.js";
 import type { ProjectRegistry } from "../app/projects.js";
@@ -23,6 +24,7 @@ export function projectToolsRoutes(
   const memory = new MemoryService(path.join(dataDir, "memory"));
   const checkpoints = new CheckpointService(path.join(dataDir, "checkpoints"));
   const terminal = new TerminalService();
+  const pendingTerminal = new Map<string, AbortController>();
   const json = (res: ServerResponse, status: number, value: unknown) => {
     res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
     res.end(JSON.stringify(value));
@@ -45,8 +47,12 @@ export function projectToolsRoutes(
         url.pathname,
       );
     const missionMatch = /^\/api\/missions\/([^/]+)\/(checkpoints|restore)$/.exec(url.pathname);
+    const autonomyMatch = /^\/api\/projects\/([^/]+)\/conversations\/([^/]+)\/autonomy$/.exec(
+      url.pathname,
+    );
+    const permissionMatch = /^\/api\/permissions(?:\/([^/]+))?$/.exec(url.pathname);
     const ask = url.pathname === "/api/repo/ask";
-    if (!projectMatch && !missionMatch && !ask) return false;
+    if (!projectMatch && !missionMatch && !ask && !autonomyMatch && !permissionMatch) return false;
     try {
       const hostname = new URL(`http://${req.headers.host ?? ""}`).hostname;
       if (
@@ -57,6 +63,33 @@ export function projectToolsRoutes(
         return true;
       }
       const method = req.method ?? "GET";
+      if (autonomyMatch && method === "PUT") {
+        const input = z
+          .object({ mode: z.enum(["manual", "assisted", "autonomous"]) })
+          .parse(await body(req));
+        await chat.setAutonomy(
+          decodeURIComponent(autonomyMatch[1]),
+          decodeURIComponent(autonomyMatch[2]),
+          input.mode,
+        );
+        json(res, 200, { ok: true });
+        return true;
+      }
+      if (permissionMatch) {
+        if (method === "GET" && !permissionMatch[1]) {
+          json(res, 200, chat.permissions.list());
+          return true;
+        }
+        if (method === "POST" && permissionMatch[1]) {
+          const input = z.object({ approved: z.boolean() }).parse(await body(req));
+          const resolved = chat.permissions.resolve(
+            decodeURIComponent(permissionMatch[1]),
+            input.approved,
+          );
+          json(res, resolved ? 200 : 404, { ok: resolved });
+          return true;
+        }
+      }
       if (ask && method === "POST") {
         const input = z
           .object({ projectId: z.string(), query: z.string().min(1).max(500) })
@@ -177,6 +210,7 @@ export function projectToolsRoutes(
         }
         if (kind === "terminal" && method === "POST") {
           if (id === "stop") {
+            pendingTerminal.get(projectId)?.abort();
             terminal.stop(projectId);
             json(res, 200, { ok: true });
             return true;
@@ -186,6 +220,7 @@ export function projectToolsRoutes(
               .object({
                 command: z.string().trim().min(1).max(4000),
                 conversationId: z.string().optional(),
+                contextConversationId: z.string().optional(),
               })
               .parse(await body(req));
             const result = await chat.withProjectOperation(projectId, async () => {
@@ -206,8 +241,28 @@ export function projectToolsRoutes(
                 cwd = conversation.worktreePath;
               }
               try {
-                return await terminal.run(projectId, cwd, input.command, emit);
+                const contextId =
+                  conversation?.id ??
+                  input.contextConversationId ??
+                  project.activeConversationId ??
+                  project.conversations[0]?.id;
+                if (!contextId || !registry.getConversation(projectId, contextId))
+                  throw new Error("conversation not found");
+                const broker = chat.broker(projectId, contextId, cwd);
+                const controller = new AbortController();
+                pendingTerminal.set(projectId, controller);
+                if (
+                  !(await broker.authorize(
+                    broker.mode === "manual" ? "execute" : commandAction(input.command),
+                    "Terminal",
+                    input.command,
+                    controller.signal,
+                  ))
+                )
+                  throw new Error("command denied by autonomy policy");
+                return await terminal.run(projectId, cwd, input.command, emit, broker.mode);
               } finally {
+                pendingTerminal.delete(projectId);
                 await chat.invalidateChangedMissions(projectId);
               }
             });

@@ -22,6 +22,8 @@ export interface RunCodexAgentOptions {
   resumeThreadId?: string;
   timeoutMs?: number;
   signal?: AbortSignal;
+  networkAccessEnabled?: boolean;
+  webSearchMode?: ThreadOptions["webSearchMode"];
   sandboxMode?: SandboxMode;
   approvalPolicy?: ApprovalMode;
   reasoningEffort?: ThreadOptions["modelReasoningEffort"];
@@ -39,7 +41,8 @@ export async function runCodexAgent(options: RunCodexAgentOptions): Promise<Code
     skipGitRepoCheck: false,
     sandboxMode: options.sandboxMode ?? "workspace-write",
     approvalPolicy: options.approvalPolicy ?? "never",
-    networkAccessEnabled: true,
+    networkAccessEnabled: options.networkAccessEnabled ?? true,
+    ...(options.webSearchMode ? { webSearchMode: options.webSearchMode } : {}),
     ...(options.model ? { model: options.model } : {}),
     ...(options.reasoningEffort ? { modelReasoningEffort: options.reasoningEffort } : {}),
   };

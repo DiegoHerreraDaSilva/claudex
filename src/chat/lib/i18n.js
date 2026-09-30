@@ -3,19 +3,50 @@ export const LANG_KEY = "claudex-lang";
 
 export const I18N = {
   pt: {
+    permissionActionread: "ler arquivos",
+    permissionActionedit: "editar arquivos",
+    permissionActiontests: "executar testes",
+    permissionActiongit: "alterar Git",
+    permissionActioninstall: "instalar dependências",
+    permissionActionnet: "acessar a rede",
+    permissionActiondelete: "excluir arquivos",
+    permissionActionexecute: "executar comando",
+
+    autonomymanual: "manual",
+    autonomyassisted: "assistido",
+    autonomyautonomous: "autônomo",
+    permissionRead: "ler arquivos",
+    permissionWrite: "editar, testar e Git",
+    permissionExternal: "instalar, rede, excluir e comandos livres",
+    permissionBlocked: "bloqueado",
+    permissionAllowed: "permitido",
+    permissionAsk: "aprovação pontual",
+    permissionTitle: "Aprovar esta ação?",
+    permissionDeny: "negar",
+    permissionApprove: "aprovar uma vez",
+    permissionOnce:
+      "A aprovação vale apenas para esta ação. Sem resposta em 90 segundos, a ação será negada.",
+    autonomyHint:
+      "O modo assistido usa Claude para aprovar ações pontuais. Scripts de teste executam código do projeto; esta política não isola processos do sistema operacional.",
+    manualAnalysis:
+      "Análise concluída em modo manual. Nenhum arquivo, teste ou checkpoint foi criado.",
+    missionStatusAnalysed: "analisada",
+
     missionStatusDraft: "rascunho",
     intelligenceTitle: "inteligência",
     repositoryMap: "mapa do repositório",
     indexedFiles: "arquivos indexados",
     dependencies: "dependências",
     indexLimited: "resultado limitado",
-    indexScope: "Índice local de texto; respeita o gitignore e exclui dependências, saídas de build e arquivos de credenciais conhecidos.",
+    indexScope:
+      "Índice local de texto; respeita o gitignore e exclui dependências, saídas de build e arquivos de credenciais conhecidos.",
     repoQuery: "buscar texto ou símbolo no projeto",
     searchRepo: "buscar no repositório",
     lexicalConfidence: "relevância léxica",
     noMatches: "nenhum trecho encontrado",
     architectureMap: "mapa de imports",
-    graphLimit: "Até 36 módulos. Linhas mostram imports locais; aliases e imports dinâmicos podem não ser resolvidos.",
+    graphLimit:
+      "Até 36 módulos. Linhas mostram imports locais; aliases e imports dinâmicos podem não ser resolvidos.",
     repositoryFiles: "arquivos do projeto",
     memoryText: "contexto para futuras missões",
     memoryKind: "tipo de memória",
@@ -23,7 +54,8 @@ export const I18N = {
     memorydecision: "decisão",
     memoryconvention: "convenção",
     addMemory: "adicionar memória",
-    memoryInjected: "Memórias salvas entram nos próximos prompts de planejamento, implementação e correção.",
+    memoryInjected:
+      "Memórias salvas entram nos próximos prompts de planejamento, implementação e correção.",
     noMemories: "nenhuma memória carregada",
     deleteMemory: "excluir",
     branches: "branches",
@@ -33,17 +65,21 @@ export const I18N = {
     noHistory: "nenhuma missão ainda",
     openMission: "abrir missão",
     contextTitle: "contexto",
-    contextSnapshot: "Contexto carregado no início da missão. Alterações na memória entram na próxima execução.",
+    contextSnapshot:
+      "Contexto carregado no início da missão. Alterações na memória entram na próxima execução.",
     checkpoints: "checkpoints",
-    checkpointHint: "Snapshots após cada execução de agente. Restaurar exige nova verificação e revisão.",
+    checkpointHint:
+      "Snapshots após cada execução de agente. Restaurar exige nova verificação e revisão.",
     restore: "restaurar",
-    confirmRestore: "Restaurar este checkpoint descarta alterações posteriores no worktree da missão, incluindo arquivos não rastreados. A aprovação anterior será invalidada.",
+    confirmRestore:
+      "Restaurar este checkpoint descarta alterações posteriores no worktree da missão, incluindo arquivos não rastreados. A aprovação anterior será invalidada.",
     restored: "checkpoint restaurado; execute a missão para validar novamente",
     terminalTitle: "terminal",
     terminalScope: "executar na pasta",
     terminalCommand: "comando",
     terminalOutput: "saída do terminal",
-    terminalHint: "Comandos rodam com suas permissões na pasta escolhida. Limite de 2 minutos e 256 KB de saída.",
+    terminalHint:
+      "Comandos rodam com suas permissões na pasta escolhida. Limite de 2 minutos e 256 KB de saída.",
     runCommand: "executar",
     exitCode: "código de saída",
 
@@ -234,7 +270,8 @@ export const I18N = {
     retry: "tentar novamente",
     confirmDiscard: "Descartar todas as alterações pendentes desta conversa?",
     actionFailed: "não foi possível executar a ação",
-    fixPrompt: "Corrija as falhas de verificação e os achados da revisão abaixo, mantendo o escopo da tarefa original:",
+    fixPrompt:
+      "Corrija as falhas de verificação e os achados da revisão abaixo, mantendo o escopo da tarefa original:",
     missionStatusPlanning: "planejando",
     missionStatusImplementing: "implementando",
     missionStatusVerifying: "verificando",
@@ -249,19 +286,50 @@ export const I18N = {
     checksSkipped: "checks não executados",
   },
   en: {
+    permissionActionread: "read files",
+    permissionActionedit: "edit files",
+    permissionActiontests: "run tests",
+    permissionActiongit: "change Git",
+    permissionActioninstall: "install dependencies",
+    permissionActionnet: "access network",
+    permissionActiondelete: "delete files",
+    permissionActionexecute: "execute command",
+
+    autonomymanual: "manual",
+    autonomyassisted: "assisted",
+    autonomyautonomous: "autonomous",
+    permissionRead: "read files",
+    permissionWrite: "edit, test and Git",
+    permissionExternal: "install, network, delete and arbitrary commands",
+    permissionBlocked: "blocked",
+    permissionAllowed: "allowed",
+    permissionAsk: "one-time approval",
+    permissionTitle: "Approve this action?",
+    permissionDeny: "deny",
+    permissionApprove: "approve once",
+    permissionOnce:
+      "Approval applies to this action only. No response within 90 seconds denies the action.",
+    autonomyHint:
+      "Assisted mode uses Claude for individual approvals. Test scripts execute project code; this policy does not isolate operating system processes.",
+    manualAnalysis:
+      "Analysis completed in manual mode. No files, tests or checkpoints were created.",
+    missionStatusAnalysed: "analysed",
+
     missionStatusDraft: "draft",
     intelligenceTitle: "intelligence",
     repositoryMap: "repository map",
     indexedFiles: "indexed files",
     dependencies: "dependencies",
     indexLimited: "limited result",
-    indexScope: "Local text index; respects gitignore and excludes dependencies, build outputs and known credential files.",
+    indexScope:
+      "Local text index; respects gitignore and excludes dependencies, build outputs and known credential files.",
     repoQuery: "search project text or symbols",
     searchRepo: "search repository",
     lexicalConfidence: "lexical relevance",
     noMatches: "no matching snippets",
     architectureMap: "import map",
-    graphLimit: "Up to 36 modules. Lines show local imports; aliases and dynamic imports may be unresolved.",
+    graphLimit:
+      "Up to 36 modules. Lines show local imports; aliases and dynamic imports may be unresolved.",
     repositoryFiles: "project files",
     memoryText: "context for future missions",
     memoryKind: "memory kind",
@@ -281,15 +349,18 @@ export const I18N = {
     contextTitle: "context",
     contextSnapshot: "Context loaded at mission start. Memory changes enter the next execution.",
     checkpoints: "checkpoints",
-    checkpointHint: "Snapshots after each agent run. Restoring requires fresh verification and review.",
+    checkpointHint:
+      "Snapshots after each agent run. Restoring requires fresh verification and review.",
     restore: "restore",
-    confirmRestore: "Restoring this checkpoint discards subsequent changes in the mission worktree, including untracked files. The previous approval will be invalidated.",
+    confirmRestore:
+      "Restoring this checkpoint discards subsequent changes in the mission worktree, including untracked files. The previous approval will be invalidated.",
     restored: "checkpoint restored; run the mission to validate again",
     terminalTitle: "terminal",
     terminalScope: "run in folder",
     terminalCommand: "command",
     terminalOutput: "terminal output",
-    terminalHint: "Commands use your permissions in the selected folder. Limited to 2 minutes and 256 KB of output.",
+    terminalHint:
+      "Commands use your permissions in the selected folder. Limited to 2 minutes and 256 KB of output.",
     runCommand: "run",
     exitCode: "exit code",
 
@@ -353,7 +424,8 @@ export const I18N = {
     deleteProject: "delete project",
     deleteConversation: "delete conversation",
     renameConversation: "rename",
-    confirmDeleteProject: "Delete this project from Claudex? The folder on disk will NOT be deleted.",
+    confirmDeleteProject:
+      "Delete this project from Claudex? The folder on disk will NOT be deleted.",
     confirmDeleteConversation: "Delete this conversation and its branch/worktree?",
     conversations: "conversations",
     currentConversation: "conversation",
@@ -480,7 +552,8 @@ export const I18N = {
     retry: "retry",
     confirmDiscard: "Discard all pending changes in this conversation?",
     actionFailed: "could not perform the action",
-    fixPrompt: "Fix the verification failures and review findings below, keeping the original task scope:",
+    fixPrompt:
+      "Fix the verification failures and review findings below, keeping the original task scope:",
     missionStatusPlanning: "planning",
     missionStatusImplementing: "implementing",
     missionStatusVerifying: "verifying",
@@ -505,7 +578,8 @@ export function getLang() {
 export function t(key, params) {
   const dict = I18N[lang] ?? I18N.en;
   let value = dict[key] ?? I18N.en[key] ?? key;
-  if (params) for (const [k, v] of Object.entries(params)) value = value.split(`{${k}}`).join(String(v));
+  if (params)
+    for (const [k, v] of Object.entries(params)) value = value.split(`{${k}}`).join(String(v));
   return value;
 }
 

@@ -12,7 +12,11 @@ import type { OrchestratorConfig } from "../config.js";
 import { getCredentialStatus } from "../prerequisites.js";
 import { getClaudeUsage, type ClaudeUsage } from "../agents/claude.js";
 import { envelope } from "./protocol.js";
-import { defaultSettingsHooks, handleSettingsMessage, type SettingsIncoming } from "./settingsChannel.js";
+import {
+  defaultSettingsHooks,
+  handleSettingsMessage,
+  type SettingsIncoming,
+} from "./settingsChannel.js";
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -146,7 +150,9 @@ export function createAppServer(options: AppServerOptions): AppServer {
         return json(res, 200, await chat.missionEvents(missionId));
       }
 
-      const conversationMatch = /^\/api\/projects\/([^/]+)\/conversations\/([^/]+)$/.exec(url.pathname);
+      const conversationMatch = /^\/api\/projects\/([^/]+)\/conversations\/([^/]+)$/.exec(
+        url.pathname,
+      );
       if (conversationMatch?.[1] && conversationMatch[2]) {
         const projectId = decodeURIComponent(conversationMatch[1]);
         const conversationId = decodeURIComponent(conversationMatch[2]);
@@ -185,17 +191,31 @@ export function createAppServer(options: AppServerOptions): AppServer {
     }
   };
 
-  const toolsRoute = projectToolsRoutes(chat, registry, config.dataDir, config.worktreesDir, event => broadcast(envelope({ type: "terminal:out", ...event })));
+  const toolsRoute = projectToolsRoutes(
+    chat,
+    registry,
+    config.dataDir,
+    config.worktreesDir,
+    (event) => broadcast(envelope({ type: "terminal:out", ...event })),
+  );
 
-  chat.on("projects:updated", (data) => broadcast(envelope({ type: "projects", data: data.projects })));
+  chat.on("permission:notice", (notice) =>
+    broadcast(envelope({ type: "permission:notice", notice })),
+  );
+  chat.on("projects:updated", (data) =>
+    broadcast(envelope({ type: "projects", data: data.projects })),
+  );
   chat.on("chat:message", (data) => broadcast(envelope({ type: "chat:message", ...data })));
   chat.on("chat:routing", (data) => broadcast(envelope({ type: "chat:routing", ...data })));
   chat.on("chat:turn", (data) => broadcast(envelope({ type: "chat:turn", ...data })));
   chat.on("chat:diff", (data) => broadcast(envelope({ type: "chat:diff", ...data })));
-  chat.on("mission:summary", summary => broadcast(envelope({ type: "mission:summary", summary })));
+  chat.on("mission:summary", (summary) =>
+    broadcast(envelope({ type: "mission:summary", summary })),
+  );
   chat.on("mission:event", (data) => broadcast(envelope({ type: "mission:event", event: data })));
 
   wss.on("connection", (socket: WebSocket) => {
+    socket.send(JSON.stringify(envelope({ type: "permissions", data: chat.permissions.list() })));
     socket.send(
       JSON.stringify(envelope({ type: "projects", data: registry.summaries(chatRunning(chat)) })),
     );
@@ -222,25 +242,32 @@ export function createAppServer(options: AppServerOptions): AppServer {
         parsed.conversationId &&
         typeof parsed.text === "string"
       ) {
-        void chat.send(parsed.projectId, parsed.conversationId, parsed.text).catch((err: unknown) => {
-          socket.send(
-            JSON.stringify(
-              envelope({
-                type: "chat:error",
-                projectId: parsed.projectId,
-                conversationId: parsed.conversationId,
-                error: err instanceof Error ? err.message : String(err),
-              }),
-            ),
-          );
-        });
+        void chat
+          .send(parsed.projectId, parsed.conversationId, parsed.text)
+          .catch((err: unknown) => {
+            socket.send(
+              JSON.stringify(
+                envelope({
+                  type: "chat:error",
+                  projectId: parsed.projectId,
+                  conversationId: parsed.conversationId,
+                  error: err instanceof Error ? err.message : String(err),
+                }),
+              ),
+            );
+          });
         return;
       }
       if (parsed.type === "chat:stop" && parsed.projectId && parsed.conversationId) {
         chat.stop(parsed.projectId, parsed.conversationId);
         return;
       }
-      if (parsed.type === "chat:action" && parsed.projectId && parsed.conversationId && parsed.action) {
+      if (
+        parsed.type === "chat:action" &&
+        parsed.projectId &&
+        parsed.conversationId &&
+        parsed.action
+      ) {
         const projectId = parsed.projectId;
         const conversationId = parsed.conversationId;
         const run =
@@ -249,9 +276,27 @@ export function createAppServer(options: AppServerOptions): AppServer {
             : parsed.action === "discard"
               ? chat.discard(projectId, conversationId)
               : Promise.resolve({ ok: false, reason: "unknown action" });
-        void run.then(result => socket.send(JSON.stringify(envelope({ type: "chat:action:result", projectId, conversationId, ...result })))).catch((err: unknown) => {
-          socket.send(JSON.stringify(envelope({ type: "chat:action:result", projectId, conversationId, ok: false, reason: err instanceof Error ? err.message : String(err) })));
-        });
+        void run
+          .then((result) =>
+            socket.send(
+              JSON.stringify(
+                envelope({ type: "chat:action:result", projectId, conversationId, ...result }),
+              ),
+            ),
+          )
+          .catch((err: unknown) => {
+            socket.send(
+              JSON.stringify(
+                envelope({
+                  type: "chat:action:result",
+                  projectId,
+                  conversationId,
+                  ok: false,
+                  reason: err instanceof Error ? err.message : String(err),
+                }),
+              ),
+            );
+          });
         return;
       }
       if (parsed.type === "conversation:create" && parsed.projectId) {
@@ -259,14 +304,21 @@ export function createAppServer(options: AppServerOptions): AppServer {
         void registry.createConversation(projectId, parsed.name).then(() => chat.emitProjects());
         return;
       }
-      if (parsed.type === "conversation:rename" && parsed.projectId && parsed.conversationId && parsed.name) {
+      if (
+        parsed.type === "conversation:rename" &&
+        parsed.projectId &&
+        parsed.conversationId &&
+        parsed.name
+      ) {
         void registry
           .renameConversation(parsed.projectId, parsed.conversationId, parsed.name)
           .then(() => chat.emitProjects());
         return;
       }
       if (parsed.type === "conversation:delete" && parsed.projectId && parsed.conversationId) {
-        void chat.removeConversation(parsed.projectId, parsed.conversationId).catch(() => undefined);
+        void chat
+          .removeConversation(parsed.projectId, parsed.conversationId)
+          .catch(() => undefined);
         return;
       }
       if (parsed.type === "project:delete" && parsed.projectId) {

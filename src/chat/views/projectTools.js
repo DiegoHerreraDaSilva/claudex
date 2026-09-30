@@ -186,7 +186,9 @@ function renderIntelligence(view, project, data) {
   view.append(card(t("searchRepo"), [search, ...results]));
   view.append(
     card(t("architectureMap"), [
-      el("div", { class: "architecture-scroll", tabindex: 0, "aria-label": t("architectureMap") }, [architecture(repo.graph)]),
+      el("div", { class: "architecture-scroll", tabindex: 0, "aria-label": t("architectureMap") }, [
+        architecture(repo.graph),
+      ]),
       el("p", { class: "muted", text: t("graphLimit") }),
     ]),
   );
@@ -392,7 +394,11 @@ export function renderContext() {
           el("code", { text: `#${entry.index} ${entry.commit.slice(0, 9)}` }),
           el("span", { class: "muted", text: new Date(entry.createdAt).toLocaleTimeString() }),
           button("restore", () => restoreCheckpoint(state.currentConversationId, entry.id), {
-            disabled: state.running.has(state.currentConversationId),
+            disabled:
+              state.running.has(state.currentConversationId) ||
+              currentProject()?.conversations.find(
+                (item) => item.id === state.currentConversationId,
+              )?.autonomy === "manual",
           }),
         ]),
       ),

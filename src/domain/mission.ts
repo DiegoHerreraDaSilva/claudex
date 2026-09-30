@@ -6,6 +6,7 @@ import type { VerificationRun } from "./verification.js";
 
 export type MissionStatus =
   | "draft"
+  | "analysed"
   | "planning"
   | "implementing"
   | "verifying"

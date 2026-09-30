@@ -1,5 +1,7 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { PermissionBroker, codexPermissions, isAutonomy } from "./application/permissionBroker.js";
+import type { AutonomyMode } from "./domain/mission.js";
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 import { runClaudeAgent, CLAUDE_TOOLS } from "./agents/claude.js";
@@ -27,6 +29,7 @@ export interface Subtask {
 
 export interface ExecuteOptions {
   description: string;
+  autonomy?: AutonomyMode;
   subtasks?: Subtask[];
   cleanup?: boolean;
   dryRun?: boolean;
@@ -64,6 +67,7 @@ export class Orchestrator extends TypedEmitter<OrchestratorEventMap> {
   private readonly tasks = new Map<string, InternalTask>();
   private readonly worktrees: WorktreeManager;
   private paused = false;
+  private autonomy: AutonomyMode = "autonomous";
   private killed = new Set<string>();
   private fleetStartedAt = Date.now();
   private lastParallelized = false;
@@ -102,6 +106,8 @@ export class Orchestrator extends TypedEmitter<OrchestratorEventMap> {
   }
 
   async execute(options: ExecuteOptions): Promise<ExecuteResult> {
+    this.autonomy = options.autonomy ?? "autonomous";
+    if (!isAutonomy(this.autonomy)) throw new Error("invalid autonomy mode");
     this.fleetStartedAt = Date.now();
     const subtasks =
       options.subtasks && options.subtasks.length > 0
@@ -137,6 +143,14 @@ export class Orchestrator extends TypedEmitter<OrchestratorEventMap> {
         await this.runTask(task, baseBranch);
       }
     }
+
+    if (this.autonomy === "manual")
+      return {
+        taskIds: created.map((task) => task.snapshot.taskId),
+        parallelized: parallelDecision.parallel,
+        merged: [],
+        snapshot: this.snapshot(),
+      };
 
     await this.reviewPhase(created, options.description);
 
@@ -218,11 +232,13 @@ export class Orchestrator extends TypedEmitter<OrchestratorEventMap> {
         task.snapshot.status = "deciding";
         const decision = await this.jev.classifyComplexity(task.snapshot.description);
         task.snapshot.complexity = decision.complexity;
-        const spec = agentForComplexity(decision.complexity, {
+        let spec = agentForComplexity(decision.complexity, {
           plannerModel: this.config.defaultPlannerModel,
           simpleModel: this.config.defaultSimpleModel,
           complexModel: this.config.defaultComplexModel,
         });
+        if (this.autonomy !== "autonomous")
+          spec = { kind: "claude", model: "sonnet", label: "claude:sonnet" };
         task.spec = spec;
         task.snapshot.agent = spec.label;
         task.snapshot.agentKind = spec.kind;
@@ -251,7 +267,10 @@ export class Orchestrator extends TypedEmitter<OrchestratorEventMap> {
     }
     await this.waitWhilePaused();
     try {
-      await this.worktrees.create(snapshot.taskId, baseBranch);
+      if (this.autonomy === "manual") {
+        snapshot.worktree = this.config.projectRoot;
+        task.prompt = `Analyze this request using only repository reads. Do not edit or execute commands.\n${task.prompt}`;
+      } else await this.worktrees.create(snapshot.taskId, baseBranch);
     } catch (err) {
       this.fail(task, `Failed to create worktree: ${errorMessage(err)}`);
       return;
@@ -273,6 +292,14 @@ export class Orchestrator extends TypedEmitter<OrchestratorEventMap> {
           model: spec.model,
           worktreePath: snapshot.worktree,
           allowedTools: [...CLAUDE_TOOLS.implementer],
+          permissionPolicy: new PermissionBroker(
+            this.autonomy,
+            "cli",
+            task.snapshot.taskId,
+            task.snapshot.worktree,
+            undefined,
+            async (event) => this.appendMessage(task, "system", event.message),
+          ).claudeOptions(CLAUDE_TOOLS.implementer),
           maxTurns: 30,
           timeoutMs: this.config.agentTimeoutMs,
           onMessage: (message) => this.onClaudeMessage(task, message),
@@ -281,6 +308,7 @@ export class Orchestrator extends TypedEmitter<OrchestratorEventMap> {
         snapshot.usage = run.usage;
       } else {
         const run = await runCodexAgent({
+          ...codexPermissions(this.autonomy),
           prompt: task.prompt,
           worktreePath: snapshot.worktree,
           model: spec.model,
@@ -290,7 +318,8 @@ export class Orchestrator extends TypedEmitter<OrchestratorEventMap> {
         snapshot.threadId = run.threadId;
         snapshot.usage = run.usage;
       }
-      snapshot.diff = await this.worktrees.getDiff(snapshot.taskId);
+      snapshot.diff =
+        this.autonomy === "manual" ? "" : await this.worktrees.getDiff(snapshot.taskId);
       snapshot.filesTouched = parseFiles(snapshot.diff);
       snapshot.status = "completed";
       snapshot.completedAt = Date.now();
@@ -307,7 +336,10 @@ export class Orchestrator extends TypedEmitter<OrchestratorEventMap> {
   }
 
   private async reviewPhase(created: InternalTask[], overview: string): Promise<void> {
-    const plan = buildPlan(overview, created.map((t) => t.snapshot.description));
+    const plan = buildPlan(
+      overview,
+      created.map((t) => t.snapshot.description),
+    );
     for (const task of created) {
       const snap = task.snapshot;
       if (snap.status !== "completed" || !snap.diff) continue;
@@ -330,7 +362,11 @@ export class Orchestrator extends TypedEmitter<OrchestratorEventMap> {
         snap.status = "failed";
         snap.error = `Review rejected: ${outcome.issues.join("; ") || outcome.summary}`;
       }
-      this.appendMessage(task, "result", `Review ${outcome.approved ? "approved" : "rejected"} (noul=${outcome.noul.toFixed(3)})`);
+      this.appendMessage(
+        task,
+        "result",
+        `Review ${outcome.approved ? "approved" : "rejected"} (noul=${outcome.noul.toFixed(3)})`,
+      );
       this.pushFleet();
     }
   }
@@ -360,6 +396,12 @@ export class Orchestrator extends TypedEmitter<OrchestratorEventMap> {
         model: "opus",
         worktreePath: this.config.projectRoot,
         allowedTools: [...CLAUDE_TOOLS.reviewer],
+        permissionPolicy: new PermissionBroker(
+          "manual",
+          "cli",
+          snap.taskId,
+          this.config.projectRoot,
+        ).claudeOptions(CLAUDE_TOOLS.reviewer),
         maxTurns: 3,
         timeoutMs: Math.min(this.config.agentTimeoutMs, 180_000),
         outputSchema: REVIEW_JSON_SCHEMA,
@@ -395,6 +437,14 @@ export class Orchestrator extends TypedEmitter<OrchestratorEventMap> {
           model: task.spec.model,
           worktreePath: snap.worktree,
           allowedTools: [...CLAUDE_TOOLS.implementer],
+          permissionPolicy: new PermissionBroker(
+            this.autonomy,
+            "cli",
+            task.snapshot.taskId,
+            task.snapshot.worktree,
+            undefined,
+            async (event) => this.appendMessage(task, "system", event.message),
+          ).claudeOptions(CLAUDE_TOOLS.implementer),
           maxTurns: 20,
           timeoutMs: this.config.agentTimeoutMs,
           resumeSessionId: snap.sessionId,
@@ -404,6 +454,7 @@ export class Orchestrator extends TypedEmitter<OrchestratorEventMap> {
         addUsage(snap, run.usage);
       } else {
         const run = await runCodexAgent({
+          ...codexPermissions(this.autonomy),
           prompt,
           worktreePath: snap.worktree,
           model: task.spec.model,
@@ -435,7 +486,12 @@ export class Orchestrator extends TypedEmitter<OrchestratorEventMap> {
         const b = block as { type?: string; text?: string; name?: string; input?: unknown };
         if (b.type === "text" && b.text) this.appendMessage(task, "assistant", b.text);
         else if (b.type === "tool_use") {
-          this.appendMessage(task, "tool", b.name ?? "tool", JSON.stringify(b.input ?? {}).slice(0, 400));
+          this.appendMessage(
+            task,
+            "tool",
+            b.name ?? "tool",
+            JSON.stringify(b.input ?? {}).slice(0, 400),
+          );
         }
       }
       return;
@@ -447,7 +503,12 @@ export class Orchestrator extends TypedEmitter<OrchestratorEventMap> {
   }
 
   private onCodexEvent(task: InternalTask, event: unknown): void {
-    const e = event as { type?: string; thread_id?: string; item?: { type?: string; text?: string; command?: string; changes?: unknown[] }; usage?: unknown };
+    const e = event as {
+      type?: string;
+      thread_id?: string;
+      item?: { type?: string; text?: string; command?: string; changes?: unknown[] };
+      usage?: unknown;
+    };
     switch (e.type) {
       case "thread.started":
         this.appendMessage(task, "system", `thread=${e.thread_id ?? "?"}`);
@@ -460,11 +521,19 @@ export class Orchestrator extends TypedEmitter<OrchestratorEventMap> {
       case "item.updated": {
         const item = e.item;
         if (!item) break;
-        if (item.type === "agent_message" && item.text) this.appendMessage(task, "assistant", item.text);
-        else if (item.type === "reasoning" && item.text) this.appendMessage(task, "assistant", item.text);
-        else if (item.type === "command_execution" && item.command) this.appendMessage(task, "tool", item.command);
+        if (item.type === "agent_message" && item.text)
+          this.appendMessage(task, "assistant", item.text);
+        else if (item.type === "reasoning" && item.text)
+          this.appendMessage(task, "assistant", item.text);
+        else if (item.type === "command_execution" && item.command)
+          this.appendMessage(task, "tool", item.command);
         else if (item.type === "file_change" && item.changes) {
-          this.appendMessage(task, "tool", "file_change", JSON.stringify(item.changes).slice(0, 400));
+          this.appendMessage(
+            task,
+            "tool",
+            "file_change",
+            JSON.stringify(item.changes).slice(0, 400),
+          );
         }
         break;
       }
@@ -473,11 +542,20 @@ export class Orchestrator extends TypedEmitter<OrchestratorEventMap> {
     }
   }
 
-  private appendMessage(task: InternalTask, role: TaskMessageRole, text: string, meta?: string): void {
+  private appendMessage(
+    task: InternalTask,
+    role: TaskMessageRole,
+    text: string,
+    meta?: string,
+  ): void {
     const message: TaskMessage = { at: Date.now(), role, text, ...(meta ? { meta } : {}) };
     task.snapshot.messages.push(message);
     if (task.snapshot.messages.length > 500) task.snapshot.messages.splice(0, 100);
-    this.emit("task:message", { taskId: task.snapshot.taskId, agent: task.snapshot.agent, message });
+    this.emit("task:message", {
+      taskId: task.snapshot.taskId,
+      agent: task.snapshot.agent,
+      message,
+    });
   }
 
   private fail(task: InternalTask, error: string): void {
@@ -520,9 +598,12 @@ export class Orchestrator extends TypedEmitter<OrchestratorEventMap> {
       "utf8",
     );
     if (done) {
-      await rm(path.join(this.config.projectRoot, "tasks", "current", `${task.snapshot.taskId}.json`), {
-        force: true,
-      });
+      await rm(
+        path.join(this.config.projectRoot, "tasks", "current", `${task.snapshot.taskId}.json`),
+        {
+          force: true,
+        },
+      );
     }
   }
 }

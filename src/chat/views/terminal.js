@@ -1,6 +1,6 @@
 import { clear, el } from "../lib/dom.js";
 import { getLang, t } from "../lib/i18n.js";
-import { currentProject, notify, state } from "../lib/store.js";
+import { currentConversation, currentProject, notify, state } from "../lib/store.js";
 import { request } from "../lib/api.js";
 import { toast } from "../components/toast.js";
 import { refreshTools } from "./projectTools.js";
@@ -84,6 +84,7 @@ export function renderTerminal() {
             try {
               await request(`${projectUrl(project.id)}/terminal`, "POST", {
                 command,
+                contextConversationId: state.currentConversationId,
                 ...(data.scope === "mission"
                   ? { conversationId: state.currentConversationId }
                   : {}),
@@ -117,6 +118,7 @@ export function renderTerminal() {
   }
   host.querySelector(".terminal-run").disabled =
     data.busy ||
+    currentConversation()?.autonomy === "manual" ||
     [...state.running].some((id) => project.conversations.some((item) => item.id === id));
   host.querySelector(".terminal-stop").disabled = !data.busy;
   const output = host.querySelector(".terminal-output");

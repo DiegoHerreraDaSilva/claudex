@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { ProjectRegistry, SCHEMA_VERSION } from "../src/app/projects.ts";
@@ -45,7 +45,9 @@ describe("ProjectRegistry", () => {
     const reloadedProject = reloaded.get(project.id);
     expect(reloadedProject?.conversations).toHaveLength(2);
     expect(reloadedProject?.activeConversationId).toBe(second!.id);
-    expect(reloadedProject?.conversations.find((c) => c.id === second!.id)?.messages).toHaveLength(1);
+    expect(reloadedProject?.conversations.find((c) => c.id === second!.id)?.messages).toHaveLength(
+      1,
+    );
   });
 
   it("deletes a conversation and picks a new active one", async () => {
@@ -84,7 +86,52 @@ describe("ProjectRegistry", () => {
     expect(project?.conversations[0]?.claudeSessionId).toBe("sess-1");
   });
 
+  it("backs up v2 exactly, defaults autonomy and persists a selected mode", async () => {
+    const dir = await makeDir();
+    const raw = JSON.stringify({
+      schemaVersion: 2,
+      projects: [
+        {
+          id: "p",
+          name: "old",
+          rootPath: "C:/old",
+          conversations: [
+            { id: "m", name: "mission", createdAt: 1, messages: [], claudeSessionId: "session" },
+          ],
+        },
+      ],
+    });
+    await writeFile(path.join(dir, "projects.json"), raw);
+    const registry = new ProjectRegistry(dir);
+    await registry.load();
+    await registry.flush();
+    expect(await readFile(path.join(dir, "projects.schema-2.backup.json"), "utf8")).toBe(raw);
+    expect(registry.getConversation("p", "m")?.autonomy).toBe("autonomous");
+    await registry.updateConversation("p", "m", { autonomy: "manual" });
+    await registry.flush();
+    const reloaded = new ProjectRegistry(dir);
+    await reloaded.load();
+    expect(reloaded.summaries(new Set())[0].conversations[0].autonomy).toBe("manual");
+    expect(reloaded.getConversation("p", "m")?.claudeSessionId).toBe("session");
+  });
+  it("preserves corrupted and future-schema files instead of overwriting them", async () => {
+    for (const raw of [
+      "{broken",
+      JSON.stringify({ schemaVersion: 99, projects: [] }),
+      JSON.stringify({
+        schemaVersion: 3,
+        projects: [{ id: "p", conversations: [{ id: "m", autonomy: "invalid" }] }],
+      }),
+    ]) {
+      const dir = await makeDir();
+      await writeFile(path.join(dir, "projects.json"), raw);
+      const registry = new ProjectRegistry(dir);
+      await expect(registry.load()).rejects.toThrow();
+      await registry.flush();
+      expect(await readFile(path.join(dir, "projects.json"), "utf8")).toBe(raw);
+    }
+  });
   it("keeps the schema version current", () => {
-    expect(SCHEMA_VERSION).toBe(2);
+    expect(SCHEMA_VERSION).toBe(3);
   });
 });

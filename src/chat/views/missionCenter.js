@@ -1,7 +1,13 @@
 import { clear, el } from "../lib/dom.js";
 import { renderMissionResults } from "../components/missionResults.js";
 import { t } from "../lib/i18n.js";
-import { currentConversation, currentDiff, currentProject, isRunning, state } from "../lib/store.js";
+import {
+  currentConversation,
+  currentDiff,
+  currentProject,
+  isRunning,
+  state,
+} from "../lib/store.js";
 
 const LEVEL_ICON = { success: "●", info: "○", warn: "▲", error: "✕" };
 
@@ -10,7 +16,11 @@ export function renderMissionCenter(root, actions) {
   const conversation = currentConversation();
   clear(root);
   if (!project || !conversation) {
-    root.appendChild(el("div", { class: "view empty-view" }, [el("div", { class: "empty", text: t("emptySelect") })]));
+    root.appendChild(
+      el("div", { class: "view empty-view" }, [
+        el("div", { class: "empty", text: t("emptySelect") }),
+      ]),
+    );
     return;
   }
   const view = el("div", { class: "view mission-center" });
@@ -31,19 +41,33 @@ function renderHeader(project, conversation) {
       el("div", { class: "mc-title", text: conversation.name }),
       el("span", { class: `status-badge ${running ? "running" : "idle"}` }, [
         el("span", { class: "status-dot" }),
-        el("span", { text: state.missionSummary ? t(`missionStatus${state.missionSummary.status[0].toUpperCase()}${state.missionSummary.status.slice(1)}`) : running ? t("statusRunning") : t("statusIdle") }),
+        el("span", {
+          text: state.missionSummary
+            ? t(
+                `missionStatus${state.missionSummary.status[0].toUpperCase()}${state.missionSummary.status.slice(1)}`,
+              )
+            : running
+              ? t("statusRunning")
+              : t("statusIdle"),
+        }),
       ]),
     ]),
-    el("div", { class: "mc-sub", text: `${project.name} · ${project.baseBranch || "main"}${conversation.branch ? ` · ${conversation.branch}` : ""}` }),
+    el("div", {
+      class: "mc-sub",
+      text: `${project.name} · ${project.baseBranch || "main"}${conversation.branch ? ` · ${conversation.branch}` : ""}`,
+    }),
   );
 
   const metrics = el("div", { class: "mc-metrics" });
   const usage = state.missionSummary?.usage ?? conversation.usage;
   metrics.append(
     metric(t("tokensShort"), `${usage?.inputTokens ?? 0} in / ${usage?.outputTokens ?? 0} out`),
-    metric(t("costShort"), `$${(state.missionSummary?.costUsd ?? conversation.costUsd ?? 0).toFixed(4)}`),
+    metric(
+      t("costShort"),
+      `$${(state.missionSummary?.costUsd ?? conversation.costUsd ?? 0).toFixed(4)}`,
+    ),
     metric(t("tabFiles"), String(diff?.files?.length ?? 0)),
-    metric(t("autonomy"), conversation.activeAgent || t("autonomyAssisted")),
+    metric(t("autonomy"), t(`autonomy${conversation.autonomy ?? "autonomous"}`)),
   );
   header.appendChild(metrics);
   return header;
@@ -69,12 +93,15 @@ function renderAgents(conversation) {
   const grid = el("div", { class: "agent-grid" });
   const runs = agentRuns();
 
-  const active = [...state.missionEvents].reverse().find(event => event.type === "agent:started");
+  const active = [...state.missionEvents].reverse().find((event) => event.type === "agent:started");
   if (isRunning(conversation.id) && state.missionSummary?.status !== "verifying") {
     grid.appendChild(
       el("div", { class: "agent-card running" }, [
         el("div", { class: "agent-head" }, [
-          el("span", { class: "agent-name", text: active?.message || conversation.activeAgent || "agent" }),
+          el("span", {
+            class: "agent-name",
+            text: active?.message || conversation.activeAgent || "agent",
+          }),
           el("span", { class: "agent-role", text: t("statusRunning") }),
         ]),
         el("div", { class: "agent-bar" }, [el("i", { class: "indeterminate" })]),
@@ -96,7 +123,10 @@ function renderAgents(conversation) {
           el("span", { class: "agent-role", text: run.model }),
         ]),
         el("div", { class: "agent-bar" }, [el("i", { style: { width: "100%" } })]),
-        el("div", { class: "agent-meta", text: `${run.usage?.inputTokens ?? 0} in / ${run.usage?.outputTokens ?? 0} out · $${(run.costUsd ?? 0).toFixed(4)} · ${formatDuration(durationMs)}` }),
+        el("div", {
+          class: "agent-meta",
+          text: `${run.usage?.inputTokens ?? 0} in / ${run.usage?.outputTokens ?? 0} out · $${(run.costUsd ?? 0).toFixed(4)} · ${formatDuration(durationMs)}`,
+        }),
       ]),
     );
   }
@@ -116,10 +146,14 @@ function renderTaskGraph(conversation) {
     if (index > 0) graph.appendChild(el("div", { class: "graph-connector" }));
     const done = ["ready", "applied"].includes(state.missionSummary?.status);
     graph.appendChild(
-      el("div", { class: `task-node${isRunning(conversation.id) ? " active" : done ? " done" : ""}` }, [
-        el("span", { class: "task-node-index", text: String(index + 1) }),
-        el("span", { class: "task-node-title", text: title }),
-      ]),
+      el(
+        "div",
+        { class: `task-node${isRunning(conversation.id) ? " active" : done ? " done" : ""}` },
+        [
+          el("span", { class: "task-node-index", text: String(index + 1) }),
+          el("span", { class: "task-node-title", text: title }),
+        ],
+      ),
     );
   });
   section.appendChild(graph);
@@ -146,7 +180,9 @@ function renderTimeline() {
     const row = el("div", { class: `timeline-item ${event.level}` });
     row.append(
       el("div", { class: "timeline-time", text: formatTime(event.at) }),
-      el("div", { class: "timeline-rail" }, [el("span", { class: "timeline-dot", text: LEVEL_ICON[event.level] ?? "○" })]),
+      el("div", { class: "timeline-rail" }, [
+        el("span", { class: "timeline-dot", text: LEVEL_ICON[event.level] ?? "○" }),
+      ]),
       el("div", { class: "timeline-body" }, [
         el("div", { class: "timeline-type", text: event.type }),
         el("div", { class: "timeline-message", text: truncate(event.message, 400) }),
@@ -159,7 +195,11 @@ function renderTimeline() {
 }
 
 function formatTime(ts) {
-  return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  return new Date(ts).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
 }
 
 function formatDuration(ms) {
