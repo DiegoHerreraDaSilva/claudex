@@ -37,6 +37,16 @@ export async function currentBranch(dir: string): Promise<string> {
   return result.stdout.trim();
 }
 
+export async function hasCommits(dir: string): Promise<boolean> {
+  const result = await runGit(dir, ["rev-parse", "--verify", "--quiet", "HEAD"], true);
+  return result.code === 0;
+}
+
+/** Creates an empty initial commit so worktrees can be created on a fresh repo. */
+export async function createInitialCommit(dir: string): Promise<void> {
+  await runGit(dir, [...GIT_IDENTITY, "commit", "--allow-empty", "-m", "chore: initial commit (claudex)"]);
+}
+
 export async function branchExists(dir: string, branch: string): Promise<boolean> {
   const result = await runGit(dir, ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`], true);
   return result.code === 0;

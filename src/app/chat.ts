@@ -13,9 +13,11 @@ import {
   branchExists,
   checkout,
   commitAll,
+  createInitialCommit,
   currentBranch,
   deleteBranch,
   diffAgainst,
+  hasCommits,
   mergeBranch,
   removeWorktree,
   resetHard,
@@ -397,6 +399,15 @@ export class ChatService extends TypedEmitter<ChatEvents> {
     conversation: Conversation,
   ): Promise<{ worktreePath: string; branch: string; baseBranch: string }> {
     const root = project.rootPath;
+    if (!(await hasCommits(root))) {
+      await createInitialCommit(root);
+      await this.push(
+        project.id,
+        conversation.id,
+        "system",
+        "repositório sem commits: criei um commit inicial vazio para poder trabalhar",
+      );
+    }
     const baseBranch = project.baseBranch ?? (await currentBranch(root));
     const branch = conversation.branch ?? `claudex/${project.id.slice(0, 6)}-${conversation.id.slice(0, 6)}`;
     const worktreePath = conversation.worktreePath ?? path.join(this.worktreesBase, conversation.id);
