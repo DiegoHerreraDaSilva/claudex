@@ -333,9 +333,9 @@ export class JevClient {
     const url = `${this.config.typesafeBaseUrl.replace(/\/+$/, "")}/v1/systemone`;
     let lastError: JevError | undefined;
     for (let attempt = 1; attempt <= RETRY_MAX_ATTEMPTS; attempt++) {
-      let status = 0;
+      let status: number;
       let data: unknown;
-      let retryAfterMs: number | null = null;
+      let retryAfterMs: number | null;
       try {
         const res = await axios.post(url, request, {
           headers: {

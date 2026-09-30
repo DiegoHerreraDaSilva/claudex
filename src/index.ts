@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import path from "node:path";
 import process from "node:process";
 import chalk from "chalk";
 import { getConfig, setEnvValues } from "./config.js";
