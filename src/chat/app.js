@@ -33,6 +33,9 @@ const actions = {
   stop,
   chatAction,
   comingSoon,
+  fixAutomatically,
+  reviewChanges: showDiff,
+  reloadMissionSummary: () => loadMissionSummary(state.currentConversationId),
   reloadProjects: loadProjects,
 };
 
@@ -99,13 +102,42 @@ async function loadSnapshot(projectId) {
 function ensureMissionEvents() {
   const conversationId = state.currentConversationId;
   if (!conversationId || state.missionEventsFor === conversationId) return;
-  patch({ missionEvents: [], missionEventsFor: conversationId });
+  patch({ missionEvents: [], missionEventsFor: conversationId, missionSummary: null, missionSummaryError: false });
+  loadMissionSummary(conversationId);
   api
     .getMissionEvents(conversationId)
     .then((events) => {
-      if (state.currentConversationId === conversationId) patch({ missionEvents: events });
+      if (state.currentConversationId === conversationId) {
+        const merged = new Map([...events, ...state.missionEvents].map(event => [event.id, event]));
+        patch({ missionEvents: [...merged.values()].sort((a, b) => a.at - b.at) });
+      }
     })
     .catch(() => undefined);
+}
+
+async function loadMissionSummary(conversationId) {
+  try {
+    const summary = await api.getMissionSummary(conversationId);
+    if (state.currentConversationId !== conversationId) return;
+    if (!state.missionSummary || (summary?.revision ?? 0) >= (state.missionSummary.revision ?? 0)) patch({ missionSummary: summary, missionSummaryError: false });
+  } catch {
+    if (state.currentConversationId === conversationId) patch({ missionSummaryError: true });
+  }
+}
+
+function fixAutomatically() {
+  const summary = state.missionSummary;
+  if (!summary || isRunningMission()) return;
+  const issues = [
+    ...summary.verification.filter(run => run.status === "failed").map(run => `${run.kind}: ${run.summary}\n${(run.output ?? "").slice(-4000)}`),
+    ...(summary.review?.findings ?? []).map(finding => `${finding.file ?? ""}${finding.line ? `:${finding.line}` : ""}: ${finding.message}`),
+    summary.error ?? "",
+  ].filter(Boolean);
+  send(`${t("fixPrompt")}\n${summary.title}\n\n${issues.join("\n")}`);
+}
+
+function isRunningMission() {
+  return state.running.has(state.currentConversationId);
 }
 
 async function selectProject(projectId) {
@@ -235,7 +267,11 @@ function stop() {
 function chatAction(action) {
   const project = currentProject();
   const conversation = currentConversation();
-  if (!project || !conversation) return;
+  if (!project || !conversation || state.running.has(conversation.id)) return;
+  if (action === "discard") {
+    confirmModal({ title: t("discard"), body: t("confirmDiscard"), confirmLabel: t("discard"), cancelLabel: t("cancel"), danger: true, onConfirm: () => socketSend({ type: "chat:action", projectId: project.id, conversationId: conversation.id, action }) });
+    return;
+  }
   socketSend({
     type: "chat:action",
     projectId: project.id,
@@ -297,7 +333,7 @@ function onMessage(msg) {
       break;
     }
     case "chat:diff": {
-      if (!state.snapshot) break;
+      if (msg.projectId !== state.currentProjectId || !state.snapshot) break;
       state.snapshot.diffs = state.snapshot.diffs || {};
       state.snapshot.diffs[msg.conversationId] = {
         diff: msg.diff,
@@ -315,6 +351,17 @@ function onMessage(msg) {
         conversation.messages.push({ id: String(Date.now()), at: Date.now(), role: "error", text: msg.error });
       }
       notify();
+      break;
+    }
+    case "mission:summary": {
+      const summary = msg.summary;
+      if (summary?.id === state.currentConversationId && (!state.missionSummary || summary.revision >= state.missionSummary.revision)) {
+        patch({ missionSummary: summary, missionSummaryError: false });
+      }
+      break;
+    }
+    case "chat:action:result": {
+      if (msg.projectId === state.currentProjectId && msg.conversationId === state.currentConversationId && !msg.ok) toast(msg.reason || t("actionFailed"));
       break;
     }
     case "mission:event": {
@@ -397,6 +444,14 @@ function buildCommands() {
   return commands;
 }
 
+function showDiff() {
+  switchInspectorTab("diff");
+  if (window.innerWidth <= 1080) document.body.classList.add("inspector-open");
+  const view = document.getElementById("diff-view");
+  view?.setAttribute("tabindex", "-1");
+  view?.focus();
+}
+
 function switchInspectorTab(name) {
   document.querySelectorAll("#inspector-tabs .tab").forEach((tab) => {
     tab.classList.toggle("active", tab.dataset.tab === name);
@@ -456,12 +511,14 @@ function initShortcuts() {
         form.requestSubmit();
       }
     } else if (event.key === "Escape") {
+      document.body.classList.remove("inspector-open");
       if (paletteOpen()) closePalette();
     }
   });
 }
 
 function initFooter() {
+  document.getElementById("inspector-close")?.addEventListener("click", () => document.body.classList.remove("inspector-open"));
   document.getElementById("theme-toggle")?.addEventListener("click", toggleTheme);
   document.getElementById("lang-toggle")?.addEventListener("click", toggleLang);
   document.getElementById("palette-btn")?.addEventListener("click", () => openPalette(buildCommands()));

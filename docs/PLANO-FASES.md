@@ -2,16 +2,17 @@
 
 > Documento de handoff. Descreve o estado atual do projeto e o plano detalhado
 > para continuar o desenvolvimento em outras sessões.
-> Última atualização: após a Fase 2 (`c1df1fa`).
+> Última atualização: 30/09/2026, após a implementação da Fase 3.
+> Próxima etapa: Fase 4. Ver [entrega da Fase 3](FASE-3.md).
 
 ---
 
 ## 0. Como retomar (checklist rápido)
 
-1. `cd C:\Users\DIEGO\Desktop\clodex\jev-orchestrator`
+1. `cd C:\Users\dherrera\Desktop\Claudex`
 2. `git pull` (branch `main`, repo `https://github.com/DiegoHerreraDaSilva/claudex`).
 3. `npm install` (se necessário).
-4. `npm run build && npm run lint && npm test` — deve estar tudo verde (21 testes).
+4. `npm run build && npm run lint && npm test` — deve estar tudo verde (45 testes).
 5. Subir a UI para inspecionar: `npm run app:web` (porta 8080) e rodar
    `npm run ui:check -- http://127.0.0.1:8080` (script headless que captura erros de console).
 6. Ler a seção da fase desejada (Fase 3 → seção 7, etc.).
@@ -47,6 +48,7 @@ ESM sem bundler**. SDKs: `@anthropic-ai/claude-agent-sdk`, `@openai/codex-sdk`,
 | 0 | Domínio + Event Store + MissionService + custo + API de eventos | `deaaa00` |
 | 1 | Novo shell (ESM), design tokens, Home, command palette, toasts | `3135500` |
 | 2 | Mission Center (timeline, agent cards, task graph), intent preview, interrupt | `c1df1fa` |
+| 3 | Verification & Review, correção limitada, resumo persistido e resultado da missão | ver [FASE-3.md](FASE-3.md) |
 
 ### Base anterior (linha de base)
 - `6d7d132` — v0.1.8, app com projetos/conversas, worktrees, routing Jev, Claude/Codex, dashboard legado.
@@ -64,6 +66,8 @@ ESM sem bundler**. SDKs: `@anthropic-ai/claude-agent-sdk`, `@openai/codex-sdk`,
 - **UI**: shell redimensionável, Home, Workspace (chat + pipeline), Inspector,
   Mission Center, Command Palette, modais (projeto/pasta/settings), toasts.
 - **CLI/dashboard legado**: `src/orchestrator.ts` (fleet paralela) + `src/index.ts`.
+
+- **Fase 3**: checks no worktree, revisão Claude/Jev, uma correção automática, `mission.json`, `/api/missions/:id/summary` e painéis de resultado.
 
 ### Pendências conhecidas
 - **Fase 0.9**: a CLI (`claudex run`) ainda usa o `Orchestrator` para o fluxo
@@ -217,7 +221,9 @@ Recebidos: `chat:send`, `chat:stop`, `chat:action`, `conversation:create|rename|
 
 ---
 
-## 7. Fase 3 — Verification & Review
+## 7. Fase 3 — Verification & Review (concluída)
+
+Implementação e decisões finais em [FASE-3.md](FASE-3.md). O detalhamento abaixo é o plano original da fase.
 
 **Objetivo:** após o agente implementar, rodar um pipeline de verificação no
 worktree e uma revisão (AI + Jev), exibir findings com "corrigir

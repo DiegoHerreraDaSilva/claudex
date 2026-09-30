@@ -58,3 +58,10 @@ export async function previewMission(text) {
   if (!res.ok) return null;
   return res.json();
 }
+
+export async function getMissionSummary(missionId) {
+  const res = await fetch(`/api/missions/${encodeURIComponent(missionId)}/summary`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`mission summary ${res.status}`);
+  return res.json();
+}

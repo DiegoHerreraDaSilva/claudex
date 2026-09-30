@@ -14,6 +14,8 @@ export const state = {
   route: null,
   missionEvents: [],
   missionEventsFor: null,
+  missionSummary: null,
+  missionSummaryError: false,
   palette: { open: false, mode: "commands", query: "" },
 };
 

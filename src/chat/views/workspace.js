@@ -43,6 +43,7 @@ function renderHeader(project, conversation, actions) {
   const running = isRunning(conversation.id);
   const files = currentDiff()?.files ?? [];
   const canAct = files.length > 0 && !running;
+  const canApply = canAct && (state.missionSummary ? state.missionSummary.status === "ready" : !conversation.validationRequired);
 
   const header = el("header", { class: "workspace-header" });
   const info = el("div", { class: "proj-info" });
@@ -73,7 +74,7 @@ function renderHeader(project, conversation, actions) {
     el("button", {
       class: "ghost-btn",
       text: t("apply"),
-      disabled: !canAct,
+      disabled: !canApply,
       onclick: () => actions.chatAction("apply"),
     }),
     el("button", {
@@ -97,13 +98,14 @@ function renderPipeline(conversation) {
     { key: "stageReview", label: "review" },
     { key: "stageReady", label: "ready" },
   ];
-  let activeIndex = 0;
-  if (running) activeIndex = state.route?.stage === "plan" ? 1 : 1;
-  else if (hasDiff) activeIndex = 4;
+  const status = state.missionSummary?.status;
+  const indices = { planning: 0, implementing: 1, verifying: 2, reviewing: 3, ready: 4, applied: 4 };
+  let activeIndex = indices[status] ?? (running ? 1 : hasDiff && !status ? 4 : -1);
+  if (status === "failed") activeIndex = state.missionSummary.review ? 3 : 2;
 
   const strip = el("div", { class: "pipeline" });
   stages.forEach((stage, index) => {
-    const cls = index < activeIndex ? "done" : index === activeIndex ? (running ? "active" : "current") : "pending";
+    const cls = status === "failed" && index === activeIndex ? "failed" : index < activeIndex ? "done" : index === activeIndex ? (running ? "active" : "current") : "pending";
     strip.appendChild(el("div", { class: `pipeline-stage ${cls}` }, [
       el("span", { class: "pipeline-dot" }),
       el("span", { text: t(stage.key) }),

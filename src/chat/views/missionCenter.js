@@ -1,4 +1,5 @@
 import { clear, el } from "../lib/dom.js";
+import { renderMissionResults } from "../components/missionResults.js";
 import { t } from "../lib/i18n.js";
 import { currentConversation, currentDiff, currentProject, isRunning, state } from "../lib/store.js";
 
@@ -16,9 +17,9 @@ export function renderMissionCenter(root, actions) {
   view.appendChild(renderHeader(project, conversation));
   view.appendChild(renderAgents(conversation));
   view.appendChild(renderTaskGraph(conversation));
+  view.appendChild(renderMissionResults(actions));
   view.appendChild(renderTimeline());
   root.appendChild(view);
-  void actions;
 }
 
 function renderHeader(project, conversation) {
@@ -30,16 +31,17 @@ function renderHeader(project, conversation) {
       el("div", { class: "mc-title", text: conversation.name }),
       el("span", { class: `status-badge ${running ? "running" : "idle"}` }, [
         el("span", { class: "status-dot" }),
-        el("span", { text: running ? t("statusRunning") : t("statusIdle") }),
+        el("span", { text: state.missionSummary ? t(`missionStatus${state.missionSummary.status[0].toUpperCase()}${state.missionSummary.status.slice(1)}`) : running ? t("statusRunning") : t("statusIdle") }),
       ]),
     ]),
     el("div", { class: "mc-sub", text: `${project.name} · ${project.baseBranch || "main"}${conversation.branch ? ` · ${conversation.branch}` : ""}` }),
   );
 
   const metrics = el("div", { class: "mc-metrics" });
+  const usage = state.missionSummary?.usage ?? conversation.usage;
   metrics.append(
-    metric(t("tokensShort"), `${conversation.usage?.inputTokens ?? 0} in / ${conversation.usage?.outputTokens ?? 0} out`),
-    metric(t("costShort"), `$${(conversation.costUsd ?? 0).toFixed(4)}`),
+    metric(t("tokensShort"), `${usage?.inputTokens ?? 0} in / ${usage?.outputTokens ?? 0} out`),
+    metric(t("costShort"), `$${(state.missionSummary?.costUsd ?? conversation.costUsd ?? 0).toFixed(4)}`),
     metric(t("tabFiles"), String(diff?.files?.length ?? 0)),
     metric(t("autonomy"), conversation.activeAgent || t("autonomyAssisted")),
   );
@@ -55,6 +57,7 @@ function metric(label, value) {
 }
 
 function agentRuns() {
+  if (state.missionSummary) return state.missionSummary.agentRuns;
   return state.missionEvents
     .filter((event) => event.type === "agent:completed" && event.payload?.run)
     .map((event) => event.payload.run);
@@ -66,11 +69,12 @@ function renderAgents(conversation) {
   const grid = el("div", { class: "agent-grid" });
   const runs = agentRuns();
 
-  if (isRunning(conversation.id)) {
+  const active = [...state.missionEvents].reverse().find(event => event.type === "agent:started");
+  if (isRunning(conversation.id) && state.missionSummary?.status !== "verifying") {
     grid.appendChild(
       el("div", { class: "agent-card running" }, [
         el("div", { class: "agent-head" }, [
-          el("span", { class: "agent-name", text: conversation.activeAgent || "agent" }),
+          el("span", { class: "agent-name", text: active?.message || conversation.activeAgent || "agent" }),
           el("span", { class: "agent-role", text: t("statusRunning") }),
         ]),
         el("div", { class: "agent-bar" }, [el("i", { class: "indeterminate" })]),
@@ -103,14 +107,14 @@ function renderAgents(conversation) {
 function renderTaskGraph(conversation) {
   const section = el("section", { class: "mc-section" });
   section.appendChild(el("div", { class: "section-label", text: t("navTasks") }));
-  const plan = state.missionEvents.find((event) => event.type === "plan:created");
-  const subtasks = plan?.payload?.subtasks ?? [];
+  const plan = [...state.missionEvents].reverse().find((event) => event.type === "plan:created");
+  const subtasks = state.missionSummary?.tasks ?? plan?.payload?.subtasks ?? [];
   const graph = el("div", { class: "task-graph" });
 
   const nodes = subtasks.length > 0 ? subtasks : defaultNodes(conversation);
   nodes.forEach((title, index) => {
     if (index > 0) graph.appendChild(el("div", { class: "graph-connector" }));
-    const done = !isRunning(conversation.id) && (currentDiff()?.files?.length ?? 0) > 0;
+    const done = ["ready", "applied"].includes(state.missionSummary?.status);
     graph.appendChild(
       el("div", { class: `task-node${isRunning(conversation.id) ? " active" : done ? " done" : ""}` }, [
         el("span", { class: "task-node-index", text: String(index + 1) }),
