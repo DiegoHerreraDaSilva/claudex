@@ -1,3 +1,5 @@
+> Documento histórico da versão anterior. O fluxo atual está descrito em README.pt-BR.md e SPEC-simplification.md.
+
 # Experiência acessível: assistentes, tarefas e agendamentos
 
 Pedido: implementar as três telas restantes, suavizar os temas e facilitar o uso por pessoas não técnicas.

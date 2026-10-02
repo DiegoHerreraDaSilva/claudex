@@ -1,697 +1,467 @@
-import {
-  setAutonomy,
-  permissionNotice,
-  permissionSnapshot,
-  permissionMatrix,
-} from "./components/autonomy.js";
-import { renderTerminal, terminalEvent } from "./views/terminal.js";
-import {
-  ensureTools,
-  refreshTools,
-  renderProjectTools,
-  renderContext,
-  toolEvent,
-} from "./views/projectTools.js";
-import * as api from "./lib/api.js";
-import { applyStatic, getLang, initLang, setLang, t, THEME_KEY } from "./lib/i18n.js";
-import { initSocket, isConnected, send as socketSend } from "./lib/socket.js";
-import {
-  currentConversation,
-  currentProject,
-  notify,
-  patch,
-  state,
-  subscribe,
-} from "./lib/store.js";
-import {
-  initPalette,
-  openPalette,
-  paletteOpen,
-  closePalette,
-} from "./components/commandPalette.js";
-import { confirmModal } from "./components/confirm.js";
-import { previewModal } from "./components/previewModal.js";
-import { toast } from "./components/toast.js";
-import { initModals } from "./views/modals.js";
-import { renderHome } from "./views/home.js";
-import { renderInspector } from "./views/inspector.js";
-import { renderMissionCenter } from "./views/missionCenter.js";
-import { ensureWork, refreshWork, renderAutomation, openWorkForm } from "./views/automation.js";
-import { renderSidebar } from "./views/sidebar.js";
-import { renderWorkspace } from "./views/workspace.js";
+import { api } from "./api.js";
 
-const sidebarRoot = document.getElementById("sidebar-nav");
-const viewHost = document.getElementById("view-host");
-let modals;
+import {
+  renderActivity,
+  renderProjects,
+  renderTabs,
+  statusText,
+  sessionTitle,
+} from "./workspace.js";
+import { setupLayout } from "./layout.js";
 
-const actions = {
-  setAutonomy: (mode) => setAutonomy(mode, loadProjects),
-  selectProject,
-  openWorkspace,
-  selectConversation,
-  newConversation,
-  renameConversation,
-  deleteConversation,
-  deleteProject,
-  setView,
-  openSettings: () => modals?.openSettings(),
-  openNewProject: () => modals?.openNewProject(),
-  newTask: (options) => openWorkForm(actions, options),
-  startMission,
-  send,
-  stop,
-  chatAction,
-  comingSoon,
-  fixAutomatically,
-  reviewChanges: showDiff,
-  openInspector,
-  reloadMissionSummary: () => loadMissionSummary(state.currentConversationId),
-  reloadProjects: loadProjects,
-};
+import { setupSettings } from "./settings.js";
+import { setupTerminal } from "./terminal.js";
+import { setupAttachments } from "./attachments.js";
 
-function renderAll() {
-  ensureTools();
-  ensureWork();
-  if (state.currentConversationId) ensureMissionEvents();
-  renderSidebar(sidebarRoot, actions);
-  renderMobileNav();
-  renderView();
-  renderInspector();
-  renderContext();
-  renderTerminal();
-  const matrixHost = document.getElementById("permission-matrix");
-  if (matrixHost) matrixHost.replaceChildren(permissionMatrix());
+const $ = (id) => document.getElementById(id);
+let terminalMode = false;
+const terminal = setupTerminal(() => {
+  terminalMode = true;
+  update();
+}, notice);
+
+let projects = [],
+  projectId = localStorage.getItem("direct-project") || "",
+  sessionId = "",
+  currentSession = null;
+
+let connected = false,
+  sending = false,
+  requestVersion = 0;
+const attachments = setupAttachments(update, notice);
+
+const running = (status) => ["routing", "running", "stopping"].includes(status);
+
+function notice(text = "") {
+  $("notice").textContent = text;
+
+  $("notice").hidden = !text;
 }
 
-function renderView() {
-  document.body.classList.toggle(
-    "simple-view",
-    ["home", "agents", "tasks", "schedules"].includes(state.view),
+function project() {
+  return projects.find((p) => p.id === projectId);
+}
+
+function latestSessionId(p) {
+  return (
+    [...(p?.sessions || [])]
+      .filter((s) => s.role !== "helper")
+      .sort((a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt))[0]?.id || ""
   );
-  if (state.view === "missions" || state.view === "workspace") ensureMissionEvents();
-  switch (state.view) {
-    case "home":
-      renderHome(viewHost, actions);
-      break;
-    case "workspace":
-      renderWorkspace(viewHost, actions);
-      break;
-    case "missions":
-      renderMissionCenter(viewHost, actions);
-      break;
-    case "intelligence":
-    case "worktrees":
-    case "memory":
-    case "history":
-      renderProjectTools(viewHost, actions);
-      break;
-    case "agents":
-    case "tasks":
-    case "schedules":
-      renderAutomation(viewHost, actions);
-      break;
-    default:
-      renderHome(viewHost, actions);
+}
+
+function update() {
+  if (!project()) projectId = projects[0]?.id || "";
+
+  const p = project();
+
+  if (p && !p.sessions.some((s) => s.id === sessionId)) sessionId = latestSessionId(p);
+
+  localStorage.setItem("direct-project", projectId);
+
+  renderProjects($("projects"), projects, projectId, selectProject, removeProject);
+
+  renderTabs(
+    $("tabs"),
+    p?.sessions || [],
+    terminalMode ? "" : sessionId,
+    selectSession,
+    () => {
+      terminalMode = true;
+      update();
+    },
+    closeSession,
+  );
+  terminal.update(p, terminalMode);
+
+  $("request-folder").textContent = p
+    ? `${p.name} · ${p.rootPath}`
+    : "Escolha uma pasta à esquerda";
+
+  $("request-folder").title = p?.rootPath || "";
+
+  $("send").disabled =
+    !connected ||
+    !p ||
+    sending ||
+    attachments.pending ||
+    p.busy ||
+    p.sessions.some((s) => running(s.status));
+
+  $("send").textContent = sending
+    ? "Jev escolhendo…"
+    : p?.sessions.some((s) => running(s.status))
+      ? "Agente trabalhando"
+      : "Enviar pedido ↗";
+
+  const selected = p?.sessions.find((s) => s.id === sessionId);
+  const context = selected?.context;
+  const count = (n) => new Intl.NumberFormat("pt-BR").format(n);
+  $("context-controls").hidden = !selected;
+  $("compact-context").disabled = !connected || !selected || running(selected.status) || p?.busy;
+  $("compact-context").textContent = selected?.compacting ? "Compactando…" : "Compactar contexto";
+  $("context-label").textContent = context
+    ? `Contexto ${context.source === "estimate" ? "estimado" : "SDK"} · ${context.source === "estimate" ? "≈ " : ""}${count(context.usedTokens)} / ${context.limitTokens ? count(context.limitTokens) : "limite não informado"} tokens`
+    : "Contexto · aguardando dados do modelo";
+  $("context-label").title =
+    "Estimativa de ocupação, não consumo de tokens. Claude usa a última entrada quando disponível; Codex estima pelos textos conhecidos, sem conhecer todo o contexto interno nem compactações automáticas. Limites documentados podem diferir da janela efetiva. Atualizado após cada chamada.";
+  $("context-progress").hidden = !context?.limitTokens;
+  $("context-progress").max = context?.limitTokens || 1;
+  $("context-progress").value = context?.usedTokens || 0;
+
+  $("stop").hidden = !p?.routing && (!selected || !running(selected.status));
+
+  $("stop").disabled = Boolean(p?.routing?.stopping) || selected?.status === "stopping";
+
+  $("activity-title").textContent = p?.routing
+    ? "Jev escolhendo o modelo"
+    : selected
+      ? sessionTitle(selected)
+      : "Atividade do agente";
+
+  $("activity-description").textContent = p?.routing
+    ? "O pedido será enviado à sessão do modelo escolhido."
+    : selected
+      ? `${selected.compacting ? "Compactando contexto" : statusText(selected.status)} · ${selected.source === "heuristic" ? "Roteamento local" : selected.source === "jev" ? "Escolhido pelo Jev" : "Escolhendo o modelo"}${selected.effort ? ` · Esforço: ${selected.effort}` : ""}`
+      : "Respostas, ferramentas e progresso em tempo real.";
+
+  if (!selected) {
+    currentSession = null;
+
+    renderActivity($("activity"), null);
   }
 }
 
-async function loadProjects() {
+async function loadSession() {
+  const id = sessionId,
+    version = ++requestVersion;
+
+  if (!id) {
+    currentSession = null;
+
+    renderActivity($("activity"), null);
+
+    return;
+  }
+
   try {
-    patch({ projects: await api.getProjects() });
-  } catch {
-    patch({ projects: [] });
+    const data = await api(`/api/sessions/${id}`);
+
+    if (version !== requestVersion || sessionId !== id) return;
+
+    const same = currentSession?.id === id;
+
+    currentSession = data;
+
+    renderActivity($("activity"), data, same);
+  } catch (error) {
+    notice(error.message);
   }
 }
 
-async function loadSnapshot(projectId) {
+function selectProject(id) {
+  projectId = id;
+
+  sessionId = latestSessionId(projects.find((p) => p.id === id));
+
+  currentSession = null;
+
+  update();
+
+  void loadSession();
+}
+
+function selectSession(id) {
+  terminalMode = false;
+  sessionId = id;
+
+  update();
+
+  void loadSession();
+}
+async function closeSession(id) {
   try {
-    const snapshot = await api.getProject(projectId);
-    if (!snapshot || state.currentProjectId !== projectId) return;
-    state.running = new Set(snapshot.running ?? []);
-    patch({ snapshot });
-  } catch {
-    /* ignore */
+    await api(`/api/sessions/${id}`, "DELETE");
+    if (sessionId === id) {
+      sessionId = "";
+      currentSession = null;
+    }
+    await refresh();
+  } catch (error) {
+    notice(error.message);
   }
 }
-
-function ensureMissionEvents() {
-  const conversationId = state.currentConversationId;
-  if (!conversationId || state.missionEventsFor === conversationId) return;
-  patch({
-    missionEvents: [],
-    missionEventsFor: conversationId,
-    missionSummary: null,
-    missionSummaryError: false,
-  });
-  loadMissionSummary(conversationId);
-  api
-    .getMissionEvents(conversationId)
-    .then((events) => {
-      if (state.currentConversationId === conversationId) {
-        const merged = new Map(
-          [...events, ...state.missionEvents].map((event) => [event.id, event]),
-        );
-        patch({ missionEvents: [...merged.values()].sort((a, b) => a.at - b.at) });
-      }
-    })
-    .catch(() => undefined);
-}
-
-async function loadMissionSummary(conversationId) {
+$("compact-context").addEventListener("click", async () => {
+  const id = sessionId;
+  $("compact-context").disabled = true;
   try {
-    const summary = await api.getMissionSummary(conversationId);
-    if (state.currentConversationId !== conversationId) return;
-    if (!state.missionSummary || (summary?.revision ?? 0) >= (state.missionSummary.revision ?? 0))
-      patch({ missionSummary: summary, missionSummaryError: false });
-  } catch {
-    if (state.currentConversationId === conversationId) patch({ missionSummaryError: true });
+    await api(`/api/sessions/${id}/compact`, "POST", {});
+    await refresh();
+  } catch (error) {
+    notice(error.message);
+  } finally {
+    update();
+  }
+});
+
+async function removeProject(id) {
+  const p = projects.find((p) => p.id === id);
+
+  if (!window.confirm(`Remover “${p.name}” da lista? Os arquivos da pasta serão mantidos.`)) return;
+
+  try {
+    await api(`/api/projects/${id}`, "DELETE");
+
+    await refresh();
+  } catch (error) {
+    notice(error.message);
   }
 }
 
-function fixAutomatically() {
-  const summary = state.missionSummary;
-  if (!summary || isRunningMission()) return;
-  const issues = [
-    ...summary.verification
-      .filter((run) => run.status === "failed")
-      .map((run) => `${run.kind}: ${run.summary}\n${(run.output ?? "").slice(-4000)}`),
-    ...(summary.review?.findings ?? []).map(
-      (finding) =>
-        `${finding.file ?? ""}${finding.line ? `:${finding.line}` : ""}: ${finding.message}`,
-    ),
-    summary.error ?? "",
-  ].filter(Boolean);
-  send(`${t("fixPrompt")}\n${summary.title}\n\n${issues.join("\n")}`);
+async function refresh() {
+  projects = await api("/api/projects");
+
+  update();
+
+  await loadSession();
 }
 
-function isRunningMission() {
-  return state.running.has(state.currentConversationId);
-}
+$("request-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
 
-async function selectProject(projectId) {
-  const project = state.projects.find((item) => item.id === projectId);
-  patch({
-    currentProjectId: projectId,
-    currentConversationId: project?.activeConversationId ?? project?.conversations?.[0]?.id ?? null,
-    view: "workspace",
-    snapshot: null,
-  });
-  await loadSnapshot(projectId);
-}
+  const text = $("request").value.trim(),
+    id = projectId;
+  const sentAttachments = attachments.snapshot();
 
-async function openWorkspace(projectId, conversationId) {
-  patch({
-    currentProjectId: projectId,
-    currentConversationId: conversationId ?? null,
-    view: "workspace",
-    snapshot: null,
-  });
-  await loadSnapshot(projectId);
-}
+  if ((!text && !sentAttachments.length) || $("send").disabled) return;
 
-function selectConversation(conversationId) {
-  patch({ currentConversationId: conversationId, view: "workspace" });
-}
+  sending = true;
 
-function newConversation() {
-  const project = currentProject();
-  if (!project) return;
-  socketSend({ type: "conversation:create", projectId: project.id });
-}
+  notice();
 
-function renameConversation(conversationId, current) {
-  const project = currentProject();
-  if (!project) return;
-  const name = window.prompt(t("renameConversation"), current);
-  if (!name) return;
-  socketSend({ type: "conversation:rename", projectId: project.id, conversationId, name });
-}
+  update();
 
-function deleteConversation(conversationId) {
-  const project = currentProject();
-  if (!project) return;
-  if (!window.confirm(t("confirmDeleteConversation"))) return;
-  socketSend({ type: "conversation:delete", projectId: project.id, conversationId });
-}
-
-function deleteProject(projectId) {
-  if (!window.confirm(t("confirmDeleteProject"))) return;
-  socketSend({ type: "project:delete", projectId });
-}
-
-function setView(name) {
-  if (name === "workspace" && !currentProject()) {
-    toast(t("emptySelect"));
-    patch({ view: "home" });
-    return;
-  }
-  patch({ view: name });
-  if (state.currentProjectId && !state.snapshot && name !== "home") {
-    void loadSnapshot(state.currentProjectId);
-  }
-}
-
-async function startMission(text) {
-  const project = currentProject();
-  if (!project) {
-    toast(t("emptySelect"));
-    return;
-  }
-  const preview = await api.previewMission(text).catch(() => null);
-  if (!preview) {
-    await beginMission(text);
-    return;
-  }
-  previewModal(preview, text, () => void beginMission(text));
-}
-
-async function beginMission(text) {
-  const project = currentProject();
-  if (!project) return;
-  let conversationId =
-    state.currentConversationId ?? project.activeConversationId ?? project.conversations?.[0]?.id;
-  if (!conversationId) {
-    socketSend({ type: "conversation:create", projectId: project.id });
-    toast(t("newConversation"));
-    return;
-  }
-  patch({ view: "workspace", currentConversationId: conversationId });
-  if (!state.snapshot) await loadSnapshot(project.id);
-  send(text);
-}
-
-function send(text) {
-  const project = currentProject();
-  const conversation = currentConversation();
-  if (!project || !conversation) {
-    toast(t("emptySelect"));
-    return;
-  }
-  if (state.running.has(conversation.id)) return;
-  socketSend({
-    type: "chat:send",
-    projectId: project.id,
-    conversationId: conversation.id,
-    text,
-  });
-}
-
-function stop() {
-  const project = currentProject();
-  const conversation = currentConversation();
-  if (!project || !conversation) return;
-  if (!state.running.has(conversation.id)) return;
-  confirmModal({
-    title: t("interruptTitle"),
-    body: t("interruptBody"),
-    confirmLabel: t("interrupt"),
-    cancelLabel: t("cancel"),
-    danger: true,
-    onConfirm: () =>
-      socketSend({ type: "chat:stop", projectId: project.id, conversationId: conversation.id }),
-  });
-}
-
-function chatAction(action) {
-  const project = currentProject();
-  const conversation = currentConversation();
-  if (!project || !conversation || state.running.has(conversation.id)) return;
-  if (action === "discard") {
-    confirmModal({
-      title: t("discard"),
-      body: t("confirmDiscard"),
-      confirmLabel: t("discard"),
-      cancelLabel: t("cancel"),
-      danger: true,
-      onConfirm: () =>
-        socketSend({
-          type: "chat:action",
-          projectId: project.id,
-          conversationId: conversation.id,
-          action,
-        }),
+  try {
+    const session = await api(`/api/projects/${id}/sessions`, "POST", {
+      text,
+      attachments: sentAttachments.map(({ name, mimeType, data }) => ({ name, mimeType, data })),
     });
-    return;
+
+    if (projectId === id) {
+      sessionId = session.id;
+      terminalMode = false;
+    }
+
+    if ($("request").value.trim() === text) $("request").value = "";
+    attachments.clear(sentAttachments);
+
+    await refresh();
+  } catch (error) {
+    notice(error.message);
+  } finally {
+    sending = false;
+
+    update();
   }
-  socketSend({
-    type: "chat:action",
-    projectId: project.id,
-    conversationId: conversation.id,
-    action,
+});
+
+$("request").addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+    event.preventDefault();
+
+    $("request-form").requestSubmit();
+  }
+});
+
+$("stop").addEventListener("click", async () => {
+  try {
+    await api(`/api/sessions/${project()?.routing?.id || sessionId}/stop`, "POST", {});
+
+    await refresh();
+  } catch (error) {
+    notice(error.message);
+  }
+});
+
+document
+
+  .querySelectorAll("[data-close]")
+
+  .forEach((button) => button.addEventListener("click", () => $(button.dataset.close).close()));
+
+$("add-project").addEventListener("click", async () => {
+  $("folder-error").textContent = "";
+
+  if (window.claudexApp?.pickFolder) {
+    try {
+      const folder = await window.claudexApp.pickFolder();
+
+      if (folder) await addFolder(folder);
+    } catch (error) {
+      notice(error.message);
+    }
+  } else {
+    $("folder-dialog").showModal();
+
+    $("folder-path").focus();
+  }
+});
+
+async function addFolder(folder, name) {
+  const p = await api("/api/projects", "POST", { rootPath: folder, name });
+
+  projectId = p.id;
+
+  sessionId = "";
+
+  await refresh();
+
+  notice();
+}
+
+$("folder-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  try {
+    await addFolder($("folder-path").value, $("folder-name").value);
+
+    $("folder-dialog").close();
+
+    $("folder-form").reset();
+  } catch (error) {
+    $("folder-error").textContent = error.message;
+  }
+});
+
+let parentFolder = "";
+
+async function browse(folder = "") {
+  try {
+    const data = await api(`/api/fs/list?path=${encodeURIComponent(folder)}`);
+
+    $("folder-path").value = data.path;
+
+    parentFolder = data.parent;
+
+    $("parent-folder").hidden = data.parent === data.path;
+
+    $("folder-browser").replaceChildren();
+
+    for (const entry of data.entries) {
+      const b = document.createElement("button");
+
+      b.type = "button";
+
+      b.textContent = entry.name;
+
+      b.addEventListener("click", () => void browse(entry.path));
+
+      $("folder-browser").append(b);
+    }
+
+    $("folder-error").textContent = "";
+  } catch (error) {
+    $("folder-error").textContent = error.message;
+  }
+}
+
+$("browse").addEventListener("click", () => void browse($("folder-path").value));
+
+$("parent-folder").addEventListener("click", () => void browse(parentFolder));
+
+function theme(value) {
+  document.documentElement.dataset.theme = value;
+
+  localStorage.setItem("direct-theme", value);
+
+  $("theme").textContent = value === "dark" ? "Tema claro" : "Tema escuro";
+}
+
+theme(localStorage.getItem("direct-theme") || "dark");
+
+$("theme").addEventListener("click", () =>
+  theme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"),
+);
+
+setupSettings();
+setupLayout();
+
+function connect() {
+  const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`);
+
+  ws.addEventListener("open", () => {
+    connected = true;
+
+    $("connection").textContent = "Conectado";
+
+    update();
+
+    void refresh().catch((error) => notice(error.message));
+    void terminal.reconnect();
   });
-}
 
-function comingSoon() {
-  toast(t("comingSoon"));
-}
+  ws.addEventListener("message", (event) => {
+    let message;
 
-function onMessage(msg) {
-  switch (msg.type) {
-    case "work:updated":
-      refreshWork();
-      break;
-    case "permissions":
-      permissionSnapshot(msg.data ?? []);
-      break;
-    case "permission:notice":
-      permissionNotice(msg.notice);
-      break;
-    case "terminal:out":
-      terminalEvent(msg);
-      break;
-    case "projects": {
-      const projects = msg.data ?? [];
-      let conversationId = state.currentConversationId;
-      const project = projects.find((item) => item.id === state.currentProjectId);
-      if (project && !project.conversations.some((item) => item.id === conversationId)) {
-        conversationId = project.activeConversationId ?? project.conversations[0]?.id ?? null;
-      }
-      patch({ projects, currentConversationId: conversationId });
-      break;
+    try {
+      message = JSON.parse(event.data);
+    } catch {
+      return;
     }
-    case "credentials":
-      patch({ credentials: msg.data });
-      refreshWork();
-      modals?.renderCredentials();
-      break;
-    case "settings:ack":
-      modals?.handleSettingsAck(msg);
-      break;
-    case "account:start":
-      modals?.onAccountStart(msg);
-      break;
-    case "account:output":
-      modals?.onAccountOutput(msg);
-      break;
-    case "account:done":
-      modals?.onAccountDone(msg);
-      break;
-    case "chat:message": {
-      if (msg.projectId !== state.currentProjectId || !state.snapshot) break;
-      const conversation = state.snapshot.project.conversations.find(
-        (item) => item.id === msg.conversationId,
-      );
-      if (conversation) conversation.messages.push(msg.message);
-      notify();
-      break;
-    }
-    case "chat:routing": {
-      if (msg.projectId !== state.currentProjectId) break;
-      const conversation = state.snapshot?.project?.conversations?.find(
-        (item) => item.id === msg.conversationId,
-      );
-      if (conversation) conversation.activeAgent = msg.agent;
-      notify();
-      break;
-    }
-    case "chat:turn": {
-      if (msg.status === "started") state.running.add(msg.conversationId);
-      else {
-        state.running.delete(msg.conversationId);
-        if (msg.projectId === state.currentProjectId) refreshTools();
-      }
-      notify();
-      break;
-    }
-    case "chat:diff": {
-      if (msg.projectId !== state.currentProjectId || !state.snapshot) break;
-      state.snapshot.diffs = state.snapshot.diffs || {};
-      state.snapshot.diffs[msg.conversationId] = {
-        diff: msg.diff,
-        files: msg.files,
-        branch: msg.branch,
-        baseBranch: msg.baseBranch,
-      };
-      notify();
-      break;
-    }
-    case "chat:error": {
-      if (msg.projectId !== state.currentProjectId || !state.snapshot) break;
-      const conversation = state.snapshot.project.conversations.find(
-        (item) => item.id === msg.conversationId,
-      );
-      if (conversation) {
-        conversation.messages.push({
-          id: String(Date.now()),
-          at: Date.now(),
-          role: "error",
-          text: msg.error,
-        });
-      }
-      notify();
-      break;
-    }
-    case "mission:summary": {
-      refreshWork();
-      const summary = msg.summary;
+
+    if (message.type === "projects") {
+      projects = message.data;
+
+      const previous = sessionId;
+
+      update();
+
+      const selected = project()?.sessions.find((s) => s.id === sessionId);
+
       if (
-        summary?.id === state.currentConversationId &&
-        (!state.missionSummary || summary.revision >= state.missionSummary.revision)
-      ) {
-        patch({ missionSummary: summary, missionSummaryError: false });
-      }
-      break;
-    }
-    case "chat:action:result": {
-      if (
-        msg.projectId === state.currentProjectId &&
-        msg.conversationId === state.currentConversationId &&
-        !msg.ok
+        previous !== sessionId ||
+        (selected &&
+          !running(selected.status) &&
+          (currentSession?.id !== selected.id ||
+            currentSession.status !== selected.status ||
+            currentSession.events.length < selected.eventCount))
       )
-        toast(msg.reason || t("actionFailed"));
-      break;
+        void loadSession();
     }
-    case "mission:event": {
-      const event = msg.event;
-      if (!event) break;
-      toolEvent(event);
-      if (event.missionId === state.currentConversationId) {
-        state.missionEvents = [...state.missionEvents, event];
-        if (event.type === "router:decided") {
-          state.route = { stage: event.payload?.route === "plan" ? "plan" : "implement" };
-        }
-        notify();
-      }
-      break;
+
+    if (
+      message.type === "activity" &&
+      message.data.sessionId === sessionId &&
+      currentSession?.id === sessionId
+    ) {
+      if (!currentSession.events.some((e) => e.id === message.data.event.id))
+        currentSession.events.push(message.data.event);
+
+      if (currentSession.events.length > 500)
+        currentSession.events.splice(0, currentSession.events.length - 500);
+
+      currentSession.status = message.data.status;
+
+      renderActivity($("activity"), currentSession, true);
     }
-    default:
-      break;
-  }
-}
 
-function applyTheme(theme) {
-  document.documentElement.setAttribute("data-theme", theme);
-  const btn = document.getElementById("theme-toggle");
-  if (btn) btn.textContent = theme === "dark" ? t("themeLight") : t("themeDark");
-}
+    if (message.type === "account:output") $("account-output").textContent = message.line;
+    if (message.type === "terminal") terminal.receive(message.data);
 
-function initTheme() {
-  let saved;
-  try {
-    saved = localStorage.getItem(THEME_KEY);
-  } catch {
-    saved = null;
-  }
-  const prefersLight = window.matchMedia("(prefers-color-scheme: light)").matches;
-  applyTheme(saved || (prefersLight ? "light" : "dark"));
-}
-
-function toggleTheme() {
-  const current =
-    document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
-  const next = current === "dark" ? "light" : "dark";
-  try {
-    localStorage.setItem(THEME_KEY, next);
-  } catch {
-    /* ignore */
-  }
-  applyTheme(next);
-}
-
-function toggleLang() {
-  setLang(getLang() === "pt" ? "en" : "pt");
-  const btn = document.getElementById("lang-toggle");
-  if (btn) btn.textContent = getLang() === "pt" ? "EN" : "PT";
-  notify();
-}
-
-function buildCommands() {
-  const commands = [
-    { label: t("cmdRunMission"), run: () => actions.newTask() },
-    { label: t("cmdNewProject"), run: () => modals?.openNewProject() },
-    { label: t("cmdNewConversation"), run: newConversation },
-    { label: t("cmdGoHome"), run: () => actions.setView("home") },
-    { label: t("cmdShowDiff"), run: () => switchInspectorTab("diff") },
-    { label: t("cmdRunTests"), run: () => setView("missions") },
-    { label: t("cmdCreateCheckpoint"), run: () => setView("worktrees") },
-    { label: t("cmdAskRepo"), run: () => setView("intelligence") },
-    ...["manual", "assisted", "autonomous"].map((mode) => ({
-      label: `${t("cmdChangeAutonomy")}: ${t(`autonomy${mode}`)}`,
-      run: () => actions.setAutonomy(mode),
-    })),
-    { label: t("cmdInterrupt"), run: stop },
-    { label: t("cmdOpenSettings"), run: () => modals?.openSettings() },
-    { label: t("cmdToggleTheme"), run: toggleTheme },
-    { label: t("cmdToggleLang"), run: toggleLang },
-  ];
-  for (const project of state.projects) {
-    commands.push({
-      label: `${t("cmdSwitchProject")}: ${project.name}`,
-      run: () => actions.selectProject(project.id),
-    });
-  }
-  const project = currentProject();
-  if (project) {
-    for (const conversation of project.conversations ?? []) {
-      commands.push({
-        label: `↳ ${conversation.name}`,
-        run: () => actions.selectConversation(conversation.id),
-      });
-    }
-  }
-  return commands;
-}
-
-function openInspector(name) {
-  switchInspectorTab(name);
-  if (window.innerWidth <= 1080) document.body.classList.add("inspector-open");
-}
-
-function showDiff() {
-  openInspector("diff");
-  const view = document.getElementById("diff-view");
-  view?.setAttribute("tabindex", "-1");
-  view?.focus();
-}
-
-function switchInspectorTab(name) {
-  document.querySelectorAll("#inspector-tabs .tab").forEach((tab) => {
-    tab.classList.toggle("active", tab.dataset.tab === name);
+    if (message.type === "error") notice(message.message);
   });
-  document.querySelectorAll("#right .tab-panel").forEach((panel) => {
-    panel.classList.toggle("active", panel.id === `tab-${name}`);
+
+  ws.addEventListener("close", () => {
+    connected = false;
+
+    $("connection").textContent = "Reconectando…";
+
+    update();
+
+    setTimeout(connect, 1500);
   });
+
+  ws.addEventListener("error", () => ws.close());
 }
 
-function initResizers() {
-  const root = document.documentElement;
-  const setup = (id, variable, min, max) => {
-    const handle = document.getElementById(id);
-    if (!handle) return;
-    handle.addEventListener("pointerdown", (event) => {
-      event.preventDefault();
-      handle.setPointerCapture(event.pointerId);
-      const startX = event.clientX;
-      const startWidth = Number.parseInt(getComputedStyle(root).getPropertyValue(variable)) || min;
-      const onMove = (moveEvent) => {
-        const delta = moveEvent.clientX - startX;
-        const next = Math.max(min, Math.min(max, startWidth + delta));
-        root.style.setProperty(variable, `${next}px`);
-      };
-      const onUp = () => {
-        handle.removeEventListener("pointermove", onMove);
-        handle.removeEventListener("pointerup", onUp);
-      };
-      handle.addEventListener("pointermove", onMove);
-      handle.addEventListener("pointerup", onUp);
-    });
-  };
-  setup("divider-left", "--sidebar-w", 200, 420);
-  setup("divider-right", "--right-w", 260, 620);
-}
-
-function initShortcuts() {
-  window.addEventListener("keydown", (event) => {
-    if (document.querySelector("dialog[open]")) return;
-    const mod = event.ctrlKey || event.metaKey;
-    if (mod && event.key.toLowerCase() === "k") {
-      event.preventDefault();
-      if (paletteOpen()) closePalette();
-      else openPalette(buildCommands());
-    } else if (mod && event.key.toLowerCase() === "p") {
-      event.preventDefault();
-      openPalette(buildCommands());
-    } else if (mod && event.shiftKey && event.key.toLowerCase() === "d") {
-      event.preventDefault();
-      switchInspectorTab("diff");
-    } else if (mod && event.shiftKey && event.key.toLowerCase() === "s") {
-      event.preventDefault();
-      switchInspectorTab("session");
-    } else if (mod && event.key === "Enter") {
-      const form = document.querySelector(".composer");
-      if (form) {
-        event.preventDefault();
-        form.requestSubmit();
-      }
-    } else if (event.key === "Escape") {
-      document.body.classList.remove("inspector-open");
-      if (paletteOpen()) closePalette();
-    }
-  });
-}
-
-function initFooter() {
-  document
-    .getElementById("inspector-close")
-    ?.addEventListener("click", () => document.body.classList.remove("inspector-open"));
-  document.getElementById("theme-toggle")?.addEventListener("click", toggleTheme);
-  document.getElementById("lang-toggle")?.addEventListener("click", toggleLang);
-  document
-    .getElementById("palette-btn")
-    ?.addEventListener("click", () => openPalette(buildCommands()));
-  document.getElementById("brand-home")?.addEventListener("click", () => actions.setView("home"));
-  document.querySelectorAll("#inspector-tabs .tab").forEach((tab) => {
-    tab.addEventListener("click", () => switchInspectorTab(tab.dataset.tab));
-  });
-}
-
-async function boot() {
-  initLang();
-  initTheme();
-  initPalette();
-  applyStatic();
-  modals = initModals(actions);
-  initResizers();
-  initShortcuts();
-  initFooter();
-  document.getElementById("lang-toggle").textContent = getLang() === "pt" ? "EN" : "PT";
-  subscribe(renderAll);
-  initSocket(onMessage);
-  await loadProjects();
-  notify();
-  api
-    .getCredentials()
-    .then((credentials) => {
-      patch({ credentials });
-      modals.renderCredentials();
-    })
-    .catch(() => undefined);
-  modals.setupUpdates();
-  if (!isConnected()) toast(t("noConnection"), "warn");
-}
-
-void boot();
-
-function renderMobileNav() {
-  let nav = document.querySelector(".mobile-nav");
-  if (!nav) {
-    nav = document.createElement("nav");
-    nav.className = "mobile-nav";
-    document.getElementById("center").prepend(nav);
-  }
-  nav.setAttribute("aria-label", t("workspace"));
-  nav.replaceChildren();
-  for (const [key, run] of [
-    ["navHome", () => setView("home")],
-    ["navTasks", () => setView("tasks")],
-    ["navAgents", () => setView("agents")],
-    ["navSchedules", () => setView("schedules")],
-    ["newProject", actions.openNewProject],
-    ["settings", actions.openSettings],
-  ]) {
-    const button = document.createElement("button");
-    button.textContent = t(key);
-    button.onclick = run;
-    nav.append(button);
-  }
-}
+connect();

@@ -1,297 +1,354 @@
 <!doctype html>
+
 <html lang="pt-BR" data-theme="dark">
   <head>
     <meta charset="utf-8" />
+
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+
     <title>Claudex</title>
-    <link rel="stylesheet" href="/style.css" />
+
+    <link rel="icon" href="data:," />
+
+    <link rel="stylesheet" href="style.css" />
+
+    <script type="module" src="app.js"></script>
   </head>
+
   <body>
-    <div id="app">
-      <aside id="sidebar">
-        <div class="brand" id="brand-home" title="home">
-          <span class="brand-mark">C</span>
-          <span class="brand-text">
-            <span class="brand-name">Claudex</span>
-            <span class="brand-tag" data-i18n="brandTag">Control center</span>
-          </span>
-        </div>
-        <button id="new-project-btn" class="new-btn" data-i18n="newProject">+ Novo projeto</button>
-        <div id="sidebar-nav" class="sidebar-nav"></div>
-        <div class="sidebar-foot">
-          <div class="foot-row">
-            <button id="theme-toggle" class="foot-btn" title="Tema / Theme">Light</button>
-            <button id="lang-toggle" class="foot-btn" title="Idioma / Language">EN</button>
-            <button id="palette-btn" class="foot-btn" title="Ctrl+K">⌘K</button>
-            <button id="settings-btn" class="foot-btn" data-i18n="settings">Configurações</button>
-          </div>
-          <span id="cred-summary" class="muted cred-summary"></span>
-        </div>
-      </aside>
+    <div class="app">
+      <header class="topbar">
+        <h1>Claudex <span>Seu pedido. O agente certo.</span></h1>
 
-      <div id="divider-left" class="divider" role="separator" aria-orientation="vertical"></div>
-
-      <main id="center">
-        <div id="view-host" class="view-host"></div>
-      </main>
-
-      <div id="divider-right" class="divider" role="separator" aria-orientation="vertical"></div>
-
-      <aside id="right">
-        <div class="inspector-head">
-          <span class="inspector-title" data-i18n="inspector">Inspector</span>
-          <span id="inspector-branch" class="inspector-branch"></span>
-          <button id="inspector-close" class="ghost-btn inspector-close" data-i18n="close">
-            Fechar
-          </button>
+        <div class="top-actions">
+          <span id="connection" role="status">Conectando…</span
+          ><button id="theme" type="button">Tema escuro</button
+          ><button id="settings-open" type="button">Contas e ajustes</button>
         </div>
-        <div class="tabs" id="inspector-tabs">
-          <button class="tab active" data-tab="diff" data-i18n="tabDiff">Diff</button>
-          <button class="tab" data-tab="files" data-i18n="tabFiles">Arquivos</button>
-          <button class="tab" data-tab="session" data-i18n="tabSession">Sessão</button>
-          <button class="tab" data-tab="context" data-i18n="contextTitle">Contexto</button>
-          <button class="tab" data-tab="terminal" data-i18n="terminalTitle">Terminal</button>
-        </div>
-        <section id="tab-diff" class="tab-panel active">
-          <div id="diff-files" class="diff-files"></div>
-          <pre id="diff-view" class="diff"></pre>
-        </section>
-        <section id="tab-files" class="tab-panel">
-          <div id="files-list" class="files-list"></div>
-        </section>
-        <section id="tab-session" class="tab-panel"></section>
-        <section id="tab-context" class="tab-panel"></section>
-        <section id="tab-terminal" class="tab-panel"></section>
-      </aside>
-    </div>
+      </header>
 
-    <div id="modal" class="modal hidden">
-      <div class="modal-card">
-        <div class="modal-head">
-          <span data-i18n="newProjectTitle">Novo projeto</span>
-          <button id="modal-close" class="ghost-btn" data-i18n="close">Fechar</button>
+      <form id="request-form" class="request-panel">
+        <div class="request-heading">
+          <label for="request">O que você quer fazer?</label
+          ><span id="request-folder">Escolha uma pasta à esquerda</span>
         </div>
-        <div class="modal-body">
-          <div class="field">
-            <div class="field-label" data-i18n="name">Nome</div>
-            <input id="np-name" type="text" placeholder="meu-projeto" autocomplete="off" />
-          </div>
-          <div class="field">
-            <div class="field-label" data-i18n="folderLabel">
-              Pasta do projeto (repositório git)
-            </div>
-            <div class="folder-row">
-              <input
-                id="np-path"
-                type="text"
-                placeholder="C:\\caminho\\do\\repo"
-                autocomplete="off"
-              />
-              <button id="np-browse" class="small-btn" data-i18n="chooseFolder">
-                Escolher pasta
-              </button>
-            </div>
-            <div id="np-status" class="np-status"></div>
+
+        <textarea
+          id="request"
+          rows="2"
+          maxlength="32000"
+          placeholder="Descreva o que a IA deve criar ou alterar na sua pasta…"
+          title="Enter envia; Shift+Enter quebra a linha. Cole imagens com Ctrl+V ou arraste arquivos para anexar."
+        ></textarea>
+        <div
+          id="attachment-list"
+          class="attachment-list"
+          aria-label="Anexos do pedido"
+          aria-live="polite"
+          hidden
+        ></div>
+        <input id="attachment-picker" type="file" multiple hidden />
+
+        <div class="request-footer">
+          <span>Jev coordena a equipe · Contexto compartilhado</span>
+          <div class="request-actions">
+            <button
+              id="attach"
+              type="button"
+              title="Adicionar fotos ou arquivos; você também pode colar imagens ou arrastar arquivos"
+            >
+              Anexar</button
+            ><button id="send" type="submit" class="primary" disabled>Enviar pedido ↗</button>
           </div>
         </div>
-        <div class="modal-foot">
-          <span></span>
-          <button id="np-create" class="primary-btn" data-i18n="createProject">
-            Criar projeto
-          </button>
-        </div>
-      </div>
-    </div>
+      </form>
 
-    <div id="browser-modal" class="modal hidden">
-      <div class="modal-card">
-        <div class="modal-head">
-          <span data-i18n="chooseFolderTitle">Escolher pasta</span>
-          <button id="browser-close" class="ghost-btn" data-i18n="close">Fechar</button>
-        </div>
-        <div class="modal-body">
-          <div id="browser-path" class="browser-path">—</div>
-          <div id="browser-list" class="browser-list"></div>
-        </div>
-        <div class="modal-foot">
-          <button id="browser-up" class="small-btn" data-i18n="up">Subir</button>
-          <button id="browser-select" class="primary-btn" data-i18n="selectFolder">
-            Selecionar esta pasta
-          </button>
-        </div>
-      </div>
-    </div>
+      <div
+        id="input-resizer"
+        class="panel-resizer horizontal-resizer"
+        role="separator"
+        aria-label="Redimensionar input e chat"
+        aria-orientation="horizontal"
+        tabindex="0"
+      ></div>
 
-    <div id="settings-modal" class="modal hidden">
-      <div class="modal-card settings-card">
-        <div class="modal-head">
-          <span data-i18n="settingsTitle">Contas e chaves</span>
-          <button id="settings-close" class="ghost-btn" data-i18n="close">Fechar</button>
-        </div>
-        <div class="modal-body">
-          <section class="settings-section">
-            <h3 class="section-title" data-i18n="sectionAccounts">Contas</h3>
-            <div class="account-grid">
-              <div class="account-card">
-                <div class="account-head">
-                  <span class="account-name">Claude</span>
-                  <span id="claude-mode" class="mode-chip"></span>
-                </div>
-                <div id="claude-account" class="account-detail"></div>
-                <div class="btn-row">
-                  <button
-                    class="small-btn"
-                    data-provider="claude"
-                    data-action="login"
-                    data-i18n="connectSub"
-                  >
-                    Conectar
-                  </button>
-                  <button
-                    class="small-btn danger"
-                    data-provider="claude"
-                    data-action="logout"
-                    data-i18n="disconnect"
-                  >
-                    Desconectar
-                  </button>
-                </div>
-                <details>
-                  <summary data-i18n="workTechnical">Detalhes técnicos</summary>
-                  <input
-                    id="input-anthropic"
-                    type="password"
-                    placeholder="ANTHROPIC_API_KEY (opcional)"
-                    autocomplete="off"
-                  />
-                  <label class="clear"
-                    ><input type="checkbox" id="clear-anthropic" />
-                    <span data-i18n="clearAnthropic">Remover chave e usar a assinatura</span></label
-                  >
-                </details>
-              </div>
+      <div id="notice" role="alert" hidden></div>
 
-              <div class="account-card">
-                <div class="account-head">
-                  <span class="account-name">Codex</span>
-                  <span id="codex-mode" class="mode-chip"></span>
-                </div>
-                <div id="codex-account" class="account-detail"></div>
-                <div class="btn-row">
-                  <button
-                    class="small-btn"
-                    data-provider="codex"
-                    data-action="login"
-                    data-i18n="connectChatgpt"
-                  >
-                    Conectar
-                  </button>
-                  <button
-                    class="small-btn danger"
-                    data-provider="codex"
-                    data-action="logout"
-                    data-i18n="disconnect"
-                  >
-                    Desconectar
-                  </button>
-                </div>
-                <details>
-                  <summary data-i18n="workTechnical">Detalhes técnicos</summary>
-                  <input
-                    id="input-openai"
-                    type="password"
-                    placeholder="OPENAI_API_KEY (opcional)"
-                    autocomplete="off"
-                  />
-                  <label class="clear"
-                    ><input type="checkbox" id="clear-openai" />
-                    <span data-i18n="clearOpenai">Remover chave e usar o ChatGPT</span></label
-                  >
-                </details>
-              </div>
-            </div>
-          </section>
+      <div class="workspace">
+        <aside class="projects-panel" aria-label="Projetos">
+          <div class="panel-heading">
+            <h2>Projetos</h2>
 
-          <section class="settings-section">
-            <div class="section-head">
-              <h3 class="section-title" data-i18n="usage">Uso dos planos</h3>
-              <button id="usage-refresh" class="small-btn" data-i18n="refresh">Atualizar</button>
-            </div>
-            <div id="usage-status" class="usage-grid"><span class="empty">—</span></div>
-          </section>
+            <button id="add-project" type="button" aria-label="Adicionar pasta">+</button>
+          </div>
 
-          <details class="settings-section">
-            <summary data-i18n="workTechnical">Detalhes técnicos</summary>
-            <div class="section-head">
-              <h3 class="section-title">Jev / TypeSafe</h3>
-              <em id="ts-hint" class="hint"></em>
-            </div>
-            <input
-              id="input-typesafe"
-              type="password"
-              data-i18n-ph="typesafePh"
-              placeholder="Cole a chave de console.typesafe.ai/keys"
-              autocomplete="off"
-            />
-          </details>
+          <p class="sidebar-note">Qualquer pasta do computador.</p>
 
-          <details class="settings-section">
-            <summary data-i18n="workTechnical">Detalhes técnicos</summary>
-            <h3 class="section-title" data-i18n="execution">Execução</h3>
-            <label class="field-label" data-i18n="codexModel">Modelo forte do Codex</label>
-            <input
-              id="input-complex-model"
-              type="text"
-              placeholder="gpt-6-sol"
-              autocomplete="off"
-            />
-          </details>
+          <nav id="projects" aria-label="Pastas dos projetos"></nav>
 
-          <section class="settings-section">
-            <h3 data-i18n="autonomy">Autonomia</h3>
-            <div id="permission-matrix"></div>
-            <p class="muted" data-i18n="autonomyHint"></p>
-          </section>
-          <section class="settings-section" id="update-field" style="display: none">
-            <div class="section-head">
-              <h3 class="section-title" data-i18n="appUpdates">Atualizações</h3>
-              <span id="update-status" class="settings-msg"></span>
-            </div>
-            <button id="check-updates" class="small-btn" data-i18n="checkUpdates">
-              Verificar atualizações
+          <div class="sidebar-footer">As alterações são feitas diretamente na pasta escolhida.</div>
+        </aside>
+
+        <div
+          id="projects-resizer"
+          class="panel-resizer vertical-resizer"
+          role="separator"
+          aria-label="Redimensionar projetos e chat"
+          aria-orientation="vertical"
+          tabindex="0"
+        ></div>
+
+        <main class="agent-panel">
+          <div class="tabs-row" role="tablist" aria-label="Sessões e terminal">
+            <div id="tabs"></div>
+            <button
+              id="terminal-tab"
+              class="session-tab terminal-tab"
+              type="button"
+              role="tab"
+              aria-selected="false"
+              aria-controls="terminal-panel"
+              disabled
+            >
+              <strong>›_ Terminal</strong><small>Comandos na pasta</small>
             </button>
+          </div>
+
+          <div id="agent-heading" class="activity-heading">
+            <div>
+              <h2 id="activity-title">Atividade do agente</h2>
+
+              <p id="activity-description">Respostas, ferramentas e progresso em tempo real.</p>
+            </div>
+
+            <div class="agent-actions">
+              <div id="context-controls" hidden>
+                <span id="context-label"></span>
+                <progress id="context-progress" aria-label="Ocupação do contexto" hidden></progress>
+                <button
+                  id="compact-context"
+                  type="button"
+                  title="Gerar resumo com o modelo desta sessão e continuar em um contexto menor"
+                >
+                  Compactar contexto
+                </button>
+              </div>
+              <button id="stop" type="button" hidden>Parar agente</button>
+            </div>
+          </div>
+
+          <section
+            id="activity"
+            role="tabpanel"
+            aria-label="Atividade da sessão"
+            tabindex="0"
+          ></section>
+          <section id="terminal-panel" role="tabpanel" aria-labelledby="terminal-tab" hidden>
+            <div class="activity-heading terminal-heading">
+              <div>
+                <h2 id="terminal-status">Terminal</h2>
+                <p id="terminal-path"></p>
+              </div>
+              <div class="terminal-actions">
+                <button id="terminal-open" type="button">Abrir terminal</button>
+                <button id="terminal-clear" type="button">Limpar</button>
+                <button id="terminal-stop" type="button">Encerrar</button>
+              </div>
+            </div>
+            <pre id="terminal-output" aria-label="Saída do terminal" tabindex="0"></pre>
+            <form id="terminal-form">
+              <label for="terminal-command">›</label>
+              <input
+                id="terminal-command"
+                autocomplete="off"
+                spellcheck="false"
+                maxlength="16000"
+                placeholder="Digite um comando e pressione Enter…"
+                aria-label="Comando do terminal"
+                disabled
+              />
+              <button id="terminal-send" type="submit" disabled>Executar</button>
+            </form>
           </section>
-
-          <details class="settings-section">
-            <summary data-i18n="workTechnical">Detalhes técnicos</summary>
-            <h3 class="section-title" data-i18n="authLog">Log de autenticação</h3>
-            <pre id="account-log" class="account-log"></pre>
-          </details>
-        </div>
-        <div class="modal-foot">
-          <span id="settings-msg" class="settings-msg"></span>
-          <button id="settings-save" class="primary-btn" data-i18n="save">Salvar</button>
-        </div>
+        </main>
       </div>
     </div>
 
-    <div id="palette" class="palette hidden">
-      <div class="palette-card">
-        <input
-          id="palette-input"
-          class="palette-input"
-          type="text"
-          spellcheck="false"
-          data-i18n-ph="palettePlaceholder"
-          placeholder="Digite um comando..."
+    <dialog id="folder-dialog">
+      <form id="folder-form">
+        <div class="dialog-heading">
+          <h2>Adicionar projeto</h2>
+
+          <button type="button" data-close="folder-dialog" aria-label="Fechar">×</button>
+        </div>
+
+        <label for="folder-path">Pasta do computador</label
+        ><input id="folder-path" required placeholder="C:\Minha pasta" />
+
+        <div class="browse-heading">
+          <button id="browse" type="button">Navegar pelas pastas</button
+          ><button id="parent-folder" type="button" hidden>↑ Pasta acima</button>
+        </div>
+
+        <div id="folder-browser"></div>
+
+        <label for="folder-name">Nome do projeto (opcional)</label
+        ><input id="folder-name" maxlength="120" placeholder="Nome da pasta" />
+
+        <p id="folder-error" class="form-error" role="alert"></p>
+
+        <button class="primary" type="submit">Adicionar pasta</button>
+      </form>
+    </dialog>
+
+    <dialog id="settings-dialog">
+      <div class="dialog-heading">
+        <h2>Contas e ajustes</h2>
+
+        <button type="button" data-close="settings-dialog" aria-label="Fechar">×</button>
+      </div>
+
+      <p class="muted">Use suas contas Claude e Codex ou configure chaves de API.</p>
+
+      <div id="accounts"></div>
+
+      <p id="account-output" role="status"></p>
+
+      <form id="settings-form">
+        <label for="jev-key">Chave Jev / TypeSafe</label
+        ><input
+          id="jev-key"
+          name="TYPESAFE_API_KEY"
+          type="password"
           autocomplete="off"
+          placeholder="Cole uma chave para configurar"
         />
-        <div id="palette-list" class="palette-list"></div>
-      </div>
-    </div>
 
-    <div id="toasts" class="toasts"></div>
+        <fieldset class="model-settings">
+          <legend>Modelos dos agentes</legend>
 
-    <script type="module" src="/app.js"></script>
+          <p class="muted">
+            Jev escolhe o agente para cada pedido e colaborador. Você escolhe o modelo de cada um.
+          </p>
+
+          <label for="simple-provider">Agente para mudanças simples</label>
+
+          <div class="model-row">
+            <select id="simple-provider" aria-label="Provedor para mudanças simples">
+              <option value="claude">Claude</option>
+
+              <option value="codex">Codex</option></select
+            ><input
+              id="simple-model"
+              name="DEFAULT_SIMPLE_MODEL"
+              aria-label="Modelo para mudanças simples"
+              required
+              list="claude-models"
+              placeholder="sonnet"
+            />
+          </div>
+          <div class="model-row effort-row">
+            <label for="simple-effort">Esforço Simple</label>
+            <select id="simple-effort" name="DEFAULT_SIMPLE_EFFORT">
+              <option value="">Padrão do modelo</option>
+            </select>
+          </div>
+
+          <label for="complex-provider">Agente para implementação e integrações</label>
+
+          <div class="model-row">
+            <select id="complex-provider" aria-label="Provedor para implementação">
+              <option value="codex">Codex</option>
+
+              <option value="claude">Claude</option></select
+            ><input
+              id="complex-model"
+              name="DEFAULT_COMPLEX_MODEL"
+              aria-label="Modelo para implementação"
+              required
+              placeholder="gpt-6-sol"
+            />
+          </div>
+          <div class="model-row effort-row">
+            <label for="complex-effort">Esforço Complex</label>
+            <select id="complex-effort" name="DEFAULT_COMPLEX_EFFORT">
+              <option value="">Padrão do modelo</option>
+            </select>
+          </div>
+
+          <label for="planner-provider">Agente para arquitetura e investigação</label>
+
+          <div class="model-row">
+            <select id="planner-provider" aria-label="Provedor para arquitetura">
+              <option value="claude">Claude</option>
+
+              <option value="codex">Codex</option></select
+            ><input
+              id="planner-model"
+              name="DEFAULT_PLANNER_MODEL"
+              aria-label="Modelo para arquitetura"
+              required
+              list="claude-models"
+              placeholder="opus"
+            />
+          </div>
+          <div class="model-row effort-row">
+            <label for="planner-effort">Esforço Planner</label>
+            <select id="planner-effort" name="DEFAULT_PLANNER_EFFORT">
+              <option value="">Padrão do modelo</option>
+            </select>
+          </div>
+          <p class="muted">
+            Mais esforço pode aumentar o tempo e o uso de tokens. O suporte depende do modelo. Vale
+            também para colaboradores; mudar o esforço mantém a sessão.
+          </p>
+
+          <datalist id="claude-models">
+            <option value="sonnet"></option>
+
+            <option value="claude-sonnet-5-5"></option>
+
+            <option value="opus"></option>
+
+            <option value="claude-opus-5-5"></option>
+
+            <option value="haiku"></option>
+          </datalist>
+
+          <p class="muted">
+            Use um modelo disponível na sua conta. Ao mudar o modelo, ele recebe o histórico
+            compartilhado do projeto.
+          </p>
+
+          <p class="muted">
+            Para uma versão específica, use o identificador completo: Sonnet 5.5 é
+            <code>claude-sonnet-5-5</code> e Opus 5.5 é <code>claude-opus-5-5</code>. Os nomes
+            <code>sonnet</code> e <code>opus</code> usam os aliases do provedor.
+          </p>
+        </fieldset>
+
+        <details>
+          <summary>Chaves de API</summary>
+
+          <p class="muted">
+            Uma chave de API tem prioridade sobre o login por assinatura e pode gerar cobrança por
+            uso.
+          </p>
+
+          <label for="claude-key">Chave Anthropic</label
+          ><input
+            id="claude-key"
+            name="ANTHROPIC_API_KEY"
+            type="password"
+            autocomplete="off"
+          /><label for="codex-key">Chave OpenAI</label
+          ><input id="codex-key" name="OPENAI_API_KEY" type="password" autocomplete="off" />
+        </details>
+
+        <p id="settings-status" role="status"></p>
+
+        <button class="primary" type="submit">Salvar ajustes</button>
+      </form>
+    </dialog>
   </body>
 </html>

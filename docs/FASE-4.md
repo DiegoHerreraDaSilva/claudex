@@ -1,3 +1,5 @@
+> Documento histórico da versão anterior. O fluxo atual está descrito em README.pt-BR.md e SPEC-simplification.md.
+
 # Fase 4 — Inteligência do projeto
 
 Entrega local em 30/09/2026, na branch `codex/phase4-intelligence`, baseada na fase 3. Sem alteração de versão ou dependências.

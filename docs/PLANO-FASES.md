@@ -1,3 +1,5 @@
+> Documento histórico da versão anterior. O fluxo atual está descrito em README.pt-BR.md e SPEC-simplification.md.
+
 # Claudex — Plano de Implementação (Fases 3–6 + pendências)
 
 > Documento de handoff. Descreve o estado atual do projeto e o plano detalhado

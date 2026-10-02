@@ -1,7 +1,7 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path, { resolve } from "node:path";
 import { appDataDir } from "./app/paths.js";
-
+import { configuredEffort, type AgentEffort } from "./agents/effort.js";
 export interface OrchestratorConfig {
   typesafeApiKey: string;
   typesafeBaseUrl: string;
@@ -9,16 +9,16 @@ export interface OrchestratorConfig {
   jevCacheTtlMs: number;
   wsPort: number;
   agentTimeoutMs: number;
-  maxParallelTasks: number;
   defaultPlannerModel: string;
   defaultSimpleModel: string;
   defaultComplexModel: string;
+  defaultPlannerEffort?: AgentEffort;
+  defaultSimpleEffort?: AgentEffort;
+  defaultComplexEffort?: AgentEffort;
   projectRoot: string;
   dataDir: string;
-  worktreesDir: string;
   logsDir: string;
 }
-
 function loadDotEnv(root: string): void {
   const file = resolve(root, ".env");
   if (!existsSync(file)) return;
@@ -39,14 +39,12 @@ function loadDotEnv(root: string): void {
     if (process.env[key] === undefined) process.env[key] = value;
   }
 }
-
 function intEnv(name: string, fallback: number): number {
   const raw = process.env[name];
   if (raw === undefined || raw.trim() === "") return fallback;
   const parsed = Number.parseInt(raw, 10);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
-
 const PLACEHOLDER_KEYS = new Set([
   "sua-chave",
   "your-key",
@@ -57,22 +55,21 @@ const PLACEHOLDER_KEYS = new Set([
   "<api-key>",
   "xxx",
 ]);
-
 function cleanApiKey(raw: string | undefined): string {
   const value = (raw ?? "").trim();
   if (!value) return "";
   if (PLACEHOLDER_KEYS.has(value.toLowerCase())) return "";
   return value;
 }
-
 let cached: OrchestratorConfig | undefined;
-
 export function getConfig(): OrchestratorConfig {
   if (cached) return cached;
-  const projectRoot = process.env["CLAUDEX_ROOT"] ?? process.env["JEV_PROJECT_ROOT"] ?? process.cwd();
+  const projectRoot =
+    process.env["CLAUDEX_ROOT"] ?? process.env["JEV_PROJECT_ROOT"] ?? process.cwd();
+  const dataDir = process.env["CLAUDEX_DATA_DIR"]?.trim() || appDataDir();
+  loadDotEnv(dataDir);
   loadDotEnv(projectRoot);
   const cacheTtlSeconds = intEnv("JEV_CACHE_TTL", 3600);
-  const dataDir = process.env["CLAUDEX_DATA_DIR"]?.trim() || appDataDir();
   cached = {
     typesafeApiKey: cleanApiKey(process.env["TYPESAFE_API_KEY"]),
     typesafeBaseUrl: process.env["TYPESAFE_BASE_URL"] ?? "https://api.typesafe.ai",
@@ -80,24 +77,23 @@ export function getConfig(): OrchestratorConfig {
     jevCacheTtlMs: cacheTtlSeconds * 1000,
     wsPort: intEnv("WS_PORT", 8080),
     agentTimeoutMs: intEnv("AGENT_TIMEOUT_MS", 600_000),
-    maxParallelTasks: intEnv("MAX_PARALLEL_TASKS", 3),
     defaultPlannerModel: process.env["DEFAULT_PLANNER_MODEL"] ?? "opus",
     defaultSimpleModel: process.env["DEFAULT_SIMPLE_MODEL"] ?? "sonnet",
     defaultComplexModel: process.env["DEFAULT_COMPLEX_MODEL"] ?? "gpt-6-sol",
+    defaultPlannerEffort: configuredEffort(process.env["DEFAULT_PLANNER_EFFORT"]),
+    defaultSimpleEffort: configuredEffort(process.env["DEFAULT_SIMPLE_EFFORT"]),
+    defaultComplexEffort: configuredEffort(process.env["DEFAULT_COMPLEX_EFFORT"]),
     projectRoot,
     dataDir,
-    worktreesDir: path.join(dataDir, "worktrees"),
     logsDir: path.join(dataDir, "logs"),
   };
   return cached;
 }
-
 export function updateConfig(patch: Partial<OrchestratorConfig>): OrchestratorConfig {
   const config = getConfig();
   Object.assign(config, patch);
   return config;
 }
-
 export function reloadConfig(): OrchestratorConfig {
   const cfg = getConfig();
   Object.assign(cfg, {
@@ -106,21 +102,21 @@ export function reloadConfig(): OrchestratorConfig {
     jevModel: process.env["JEV_MODEL"] ?? cfg.jevModel,
     wsPort: intEnv("WS_PORT", cfg.wsPort),
     agentTimeoutMs: intEnv("AGENT_TIMEOUT_MS", cfg.agentTimeoutMs),
-    maxParallelTasks: intEnv("MAX_PARALLEL_TASKS", cfg.maxParallelTasks),
     defaultPlannerModel: process.env["DEFAULT_PLANNER_MODEL"] ?? cfg.defaultPlannerModel,
     defaultSimpleModel: process.env["DEFAULT_SIMPLE_MODEL"] ?? cfg.defaultSimpleModel,
     defaultComplexModel: process.env["DEFAULT_COMPLEX_MODEL"] ?? cfg.defaultComplexModel,
+    defaultPlannerEffort: configuredEffort(process.env["DEFAULT_PLANNER_EFFORT"]),
+    defaultSimpleEffort: configuredEffort(process.env["DEFAULT_SIMPLE_EFFORT"]),
+    defaultComplexEffort: configuredEffort(process.env["DEFAULT_COMPLEX_EFFORT"]),
   });
   return cfg;
 }
-
 export function maskSecret(value: string | undefined): string | null {
   const trimmed = (value ?? "").trim();
   if (!trimmed) return null;
   if (trimmed.length <= 8) return "****";
   return `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}`;
 }
-
 /** Keys the settings UI is allowed to write. */
 export const EDITABLE_ENV_KEYS = [
   "TYPESAFE_API_KEY",
@@ -128,8 +124,12 @@ export const EDITABLE_ENV_KEYS = [
   "OPENAI_API_KEY",
   "TYPESAFE_BASE_URL",
   "DEFAULT_COMPLEX_MODEL",
+  "DEFAULT_SIMPLE_MODEL",
+  "DEFAULT_PLANNER_MODEL",
+  "DEFAULT_PLANNER_EFFORT",
+  "DEFAULT_SIMPLE_EFFORT",
+  "DEFAULT_COMPLEX_EFFORT",
 ] as const;
-
 /**
  * Persists the given keys to .env and applies them to process.env immediately.
  * An empty string clears the key. Only whitelisted keys are accepted.
@@ -138,15 +138,15 @@ export function setEnvValues(root: string, updates: Record<string, string>): voi
   const allowed = new Set<string>(EDITABLE_ENV_KEYS);
   const sanitized: Record<string, string> = {};
   for (const [key, value] of Object.entries(updates)) {
-    if (allowed.has(key)) sanitized[key] = typeof value === "string" ? value.trim() : String(value ?? "");
+    if (allowed.has(key))
+      sanitized[key] = typeof value === "string" ? value.trim() : String(value ?? "");
   }
-
   const file = resolve(root, ".env");
+  mkdirSync(root, { recursive: true });
   const existing = existsSync(file) ? readFileSync(file, "utf8").split(/\r?\n/) : [];
   const keys = Object.keys(sanitized);
   const seen = new Set<string>();
   const out: string[] = [];
-
   for (const line of existing) {
     const match = /^([A-Z0-9_]+)\s*=/.exec(line.trim());
     const key = match?.[1];
@@ -164,7 +164,6 @@ export function setEnvValues(root: string, updates: Record<string, string>): voi
     if (value === "") delete process.env[key];
     else process.env[key] = value;
   }
-
   while (out.length > 0 && out[out.length - 1] === "") out.pop();
   writeFileSync(file, out.join("\n") + "\n", "utf8");
   reloadConfig();

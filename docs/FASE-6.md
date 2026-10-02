@@ -1,3 +1,5 @@
+> Documento histórico da versão anterior. O fluxo atual está descrito em README.pt-BR.md e SPEC-simplification.md.
+
 # Fase 6 — GitHub, CI e Browser QA
 
 Integração GitHub/PR/CI e Browser QA na branch `codex/phase6-devops`, baseada na fase 5. A escolha foi resolvida com Playwright para Google Chrome ou Microsoft Edge, conforme a preferência do usuário. `playwright-core` é dependência de runtime; não baixa navegadores. Usa os navegadores instalados, sem perfil pessoal ou login do usuário. Sem alteração de versão ou release. O smoke da interface do Claudex continua usando Electron.

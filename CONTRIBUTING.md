@@ -1,43 +1,17 @@
 # Contributing to Claudex
 
-Thanks for your interest! Issues and pull requests are welcome.
+Install Node.js 22+, run `npm install`, then `npm run build`. Use `npm run app` for Electron or `npm run app:web` for the browser. Project folders do not require Git.
 
-## Development setup
+Validate changes with `npm run typecheck`, `npm run lint`, `npm test -- --maxWorkers=2 --minWorkers=1`, `npm run build` and `npm run ui:check`. The UI smoke requires installed Chrome and uses simulated agents with isolated data. Do not commit credentials, `.env`, generated builds or QA output.
 
-```bash
-git clone https://github.com/DiegoHerreraDaSilva/claudex.git
-cd claudex
-npm install
-npm run build
-```
+- `src/application/sessionService.ts`: folder registrations, atomic session storage, routing, execution and cancellation.
+- `src/application/sessionAgent.ts`: translates SDK events into public activity.
+- `src/jev.ts`: model selection with validated Jev responses and explicit local fallback.
+- `src/agents/`: official SDK adapters, resuming one persistent context per project and model in the selected folder.
+- `src/application/agentTeam.ts`: automatic collaboration, scope reservations, messaging and cancellation; `projectMemory.ts` tracks changes without Git.
+- `src/agents/teamBridge.ts`: the shared MCP tool bridge used by Claude and Codex.
+- `src/server/sessionServer.ts`: local HTTP and WebSocket with host/origin validation.
+- `src/chat/`: the single workspace screen, folder selection, account settings and themes.
+- `desktop/`: Electron window and native folder picker.
 
-Requirements: **Node.js 22+** and **git**.
-
-## Scripts
-
-| Command | What it does |
-| --- | --- |
-| `npm run build` | Compile TypeScript and copy the UI assets to `dist/` |
-| `npm run typecheck` | Type-check only (no emit) |
-| `npm test` | Run the unit tests (vitest) |
-| `npm run format` | Format with Prettier |
-| `npm run app` | Launch the Electron desktop app |
-| `npm run app:web` | Serve the chat app in the browser (`http://localhost:8080`) |
-| `npm run smoke:jev` / `smoke:worktree` / `smoke:agents` | Manual smoke tests |
-
-## Before opening a PR
-
-1. `npm run typecheck && npm run build && npm test` must pass.
-2. Keep the change focused; add or update tests for logic you touch.
-3. Do not commit secrets — `.env`, `~/.claude/`, and `~/.codex/` are never tracked.
-
-## Architecture at a glance
-
-- `src/app/chat.ts` — the routing tree (Jev → Sonnet / Opus → Sol 6 / Sonnet), sessions, worktrees, apply/discard.
-- `src/app/projects.ts` — project + conversation storage (versioned, atomic writes).
-- `src/app/git.ts` — git helpers (worktrees, commit, diff, merge, reset).
-- `src/agents/*` — thin wrappers over the official Claude and Codex SDKs.
-- `src/server/*` — HTTP + WebSocket app server and the fleet dashboard.
-- `src/chat/*` — the chat UI (plain HTML/CSS/JS, PT/EN).
-
-See the README for the full picture.
+See SPEC-simplification.md and README.pt-BR.md for the current contract. Other phase documents in docs/ are historical.

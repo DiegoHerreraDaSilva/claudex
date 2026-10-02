@@ -1,3 +1,5 @@
+> Documento histórico da versão anterior. O fluxo atual está descrito em README.pt-BR.md e SPEC-simplification.md.
+
 # Fase 3 — Verificação e revisão de missões
 
 Implementada em 30/09/2026. O fluxo do app agora passa por implementação → verificação → revisão → pronto para aplicar.

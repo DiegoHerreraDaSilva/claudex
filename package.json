@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Claudex - local-first orchestrator routing tasks across Claude Code, Codex and the Jev (TypeSafe) decision API",
+  "description": "Claudex - Jev routes persistent coding-agent sessions that edit your local folders directly",
   "license": "MIT",
   "author": "Diego Herrera",
   "repository": {
@@ -27,7 +27,7 @@
   },
   "main": "desktop/main.mjs",
   "scripts": {
-    "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
+    "build": "node scripts/clean.mjs && tsc -p tsconfig.json && node scripts/copy-assets.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "lint": "eslint .",
@@ -35,20 +35,18 @@
     "start": "node dist/index.js",
     "app": "electron desktop/main.mjs",
     "app:web": "node dist/index.js app",
-    "ui:check": "electron scripts/ui-check.mjs",
-    "dist": "electron-builder",
-    "smoke:jev": "node dist/smoke/jev.smoke.js",
-    "smoke:agents": "node dist/smoke/agents.smoke.js",
-    "smoke:worktree": "node dist/smoke/worktree.smoke.js"
+    "ui:check": "node scripts/team-mcp-check.mjs && node scripts/direct-ui-check.mjs",
+    "dist": "electron-builder"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.285",
+    "@modelcontextprotocol/sdk": "^1.31.0",
     "@openai/codex-sdk": "^0.159.1",
     "axios": "^1.7.9",
-    "chalk": "^5.4.1",
+    "dompurify": "^3.4.16",
     "electron-updater": "^6.3.9",
+    "marked": "^18.0.14",
     "playwright-core": "^1.63.0",
-    "uuid": "^11.0.5",
     "ws": "^8.18.0",
     "zod": "^4.0.0"
   },
@@ -73,6 +71,7 @@
       "dist/**/*",
       "desktop/**/*",
       "build/icon.png",
+      "build/icon.ico",
       "package.json",
       "node_modules/**/*"
     ],
@@ -85,8 +84,8 @@
     },
     "win": {
       "target": "nsis",
-      "icon": "build/icon.png",
-      "signAndEditExecutable": false
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": true
     },
     "mac": {
       "target": "dmg",

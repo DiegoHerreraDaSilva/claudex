@@ -1,3 +1,5 @@
+> Documento histórico da versão anterior. O fluxo atual está descrito em README.pt-BR.md e SPEC-simplification.md.
+
 # Fase 5 — Autonomia
 
 Entrega local em 30/09/2026 na branch `codex/phase5-autonomy`, baseada na fase 4. Sem novas dependências ou alteração de versão.

@@ -1,51 +1,127 @@
-import { randomUUID } from "node:crypto";
-import { runCommand, type CommandResult } from "../infrastructure/process.js";
-import type { AutonomyMode } from "../domain/mission.js";
-export interface TerminalOutput {
+import { EventEmitter } from "node:events";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+
+interface Terminal {
   projectId: string;
-  runId: string;
-  stream: "stdout" | "stderr" | "system";
-  text?: string;
-  result?: CommandResult;
+  cwd: string;
+  shell: string;
+  output: string;
+  running: boolean;
+  process?: ChildProcessWithoutNullStreams;
 }
-export class TerminalService {
-  private readonly running = new Map<string, AbortController>();
-  stop(projectId: string): void {
-    this.running.get(projectId)?.abort();
+
+/** User-controlled persistent shells. Output is bounded and never persisted to disk. */
+export class TerminalService extends EventEmitter {
+  private readonly terminals = new Map<string, Terminal>();
+
+  snapshot(projectId: string) {
+    const terminal = this.terminals.get(projectId);
+    return terminal
+      ? {
+          projectId,
+          cwd: terminal.cwd,
+          shell: terminal.shell,
+          output: terminal.output,
+          running: terminal.running,
+        }
+      : { projectId, cwd: "", shell: "", output: "", running: false };
   }
-  async run(
-    projectId: string,
-    cwd: string,
-    command: string,
-    emit: (event: TerminalOutput) => void,
-    autonomy: AutonomyMode = "autonomous",
-  ): Promise<CommandResult> {
-    if (autonomy === "manual") throw new Error("terminal is disabled in manual mode");
-    if (typeof command !== "string" || !command.trim() || command.length > 4000)
-      throw new Error("command must contain 1–4000 characters");
-    if (this.running.has(projectId)) throw new Error("terminal already running");
-    const controller = new AbortController();
-    this.running.set(projectId, controller);
-    const runId = randomUUID();
-    emit({ projectId, runId, stream: "system", text: `$ ${command}\n` });
-    try {
-      const result = await runCommand(
-        process.platform === "win32" ? "powershell.exe" : "/bin/sh",
-        process.platform === "win32"
-          ? ["-NoProfile", "-NonInteractive", "-Command", command]
-          : ["-c", command],
-        {
-          cwd,
-          signal: controller.signal,
-          timeoutMs: 120_000,
-          maxOutputBytes: 256_000,
-          onOutput: (text, stream) => emit({ projectId, runId, text, stream }),
-        },
-      );
-      emit({ projectId, runId, stream: "system", result });
-      return result;
-    } finally {
-      this.running.delete(projectId);
+
+  open(projectId: string, cwd: string) {
+    if (this.terminals.get(projectId)?.running) return this.snapshot(projectId);
+    const windows = process.platform === "win32";
+    const shell = windows ? "powershell.exe" : "/bin/bash";
+    const terminal: Terminal = {
+      projectId,
+      cwd,
+      shell: windows ? "PowerShell" : "Bash",
+      output: this.terminals.get(projectId)?.output ?? "",
+      running: true,
+    };
+    const env: NodeJS.ProcessEnv = { ...process.env, TERM: "dumb" };
+    for (const key of ["TYPESAFE_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"]) delete env[key];
+    const child = spawn(
+      shell,
+      windows ? ["-NoLogo", "-NoProfile", "-NoExit", "-Command", "-"] : ["--noprofile", "--norc"],
+      {
+        cwd,
+        env,
+        windowsHide: true,
+        stdio: "pipe",
+        detached: !windows,
+      },
+    );
+    terminal.process = child;
+    this.terminals.set(projectId, terminal);
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    const output = (text: string) => {
+      terminal.output = (terminal.output + text).slice(-65536);
+      this.emit("updated", this.snapshot(projectId));
+    };
+    child.stdout.on("data", output);
+    child.stderr.on("data", output);
+    child.stdin.on("error", () => undefined);
+    child.on("error", (error) => {
+      terminal.running = false;
+      output(`\nNão foi possível iniciar o terminal: ${error.message}\n`);
+    });
+    child.on("close", (code) => {
+      terminal.running = false;
+      terminal.process = undefined;
+      output(`\n[Terminal encerrado${code === null ? "" : ` · código ${code}`} ]\n`);
+    });
+    if (windows)
+      child.stdin.write("[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)\n");
+    this.emit("updated", this.snapshot(projectId));
+    return this.snapshot(projectId);
+  }
+
+  write(projectId: string, input: string) {
+    const terminal = this.terminals.get(projectId);
+    if (!terminal?.running || !terminal.process)
+      throw new Error("Abra o terminal antes de enviar comandos.");
+    terminal.output = (terminal.output + `\n› ${input}`).slice(-65536);
+    terminal.process.stdin.write(input);
+    this.emit("updated", this.snapshot(projectId));
+  }
+
+  clear(projectId: string) {
+    const terminal = this.terminals.get(projectId);
+    if (terminal) terminal.output = "";
+    this.emit("updated", this.snapshot(projectId));
+  }
+
+  async stop(projectId: string): Promise<void> {
+    const terminal = this.terminals.get(projectId);
+    const child = terminal?.process;
+    if (!terminal || !child || !terminal.running) return;
+    const closed = new Promise<void>((resolve) => child.once("close", () => resolve()));
+    if (process.platform === "win32" && child.pid) {
+      await new Promise<void>((resolve) => {
+        const killer = spawn("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], {
+          windowsHide: true,
+        });
+        killer.on("error", () => {
+          child.kill();
+          resolve();
+        });
+        killer.on("close", () => {
+          child.kill();
+          resolve();
+        });
+      });
+    } else if (child.pid) {
+      try {
+        process.kill(-child.pid, "SIGKILL");
+      } catch {
+        child.kill("SIGKILL");
+      }
     }
+    await closed;
+  }
+
+  async close() {
+    await Promise.all([...this.terminals.keys()].map((id) => this.stop(id)));
   }
 }
