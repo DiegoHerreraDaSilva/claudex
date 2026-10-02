@@ -1,6 +1,6 @@
 {
   "name": "claudex",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Claudex - Jev routes persistent coding-agent sessions that edit your local folders directly",

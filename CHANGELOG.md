@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-02
+
 - Add file selection, pasted images and drag-and-drop attachments to requests, with previews, removal, persisted references and native image inputs for Claude/Codex; share reference paths with collaborators.
 
 - Keep effort selectors populated when an older running backend omits the effort catalog.
